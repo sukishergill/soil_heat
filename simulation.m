@@ -128,7 +128,6 @@ while t <= t_end
          K_e = (kappa*(1 - S_g))/(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
          
-         S_g = macroIP(S_w, S_g, S_n, Fluid, Grid, T);
     end
 
     t = t + Grid.dt;

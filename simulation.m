@@ -1,13 +1,17 @@
 clear variables;
 % Numerical simulation as described in Mumford (2020)
 
+
 % domain
-Grid.x = 20;    Grid.dx = 0.1;      Grid.Nx = Grid.x/Grid.dx;
-Grid.z = 5;     Grid.dz = 0.05;     Grid.Nz = Grid.z/Grid.dz;
+Grid.x = 5;     Grid.dx = 0.1;      Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 5;     Grid.dz = 0.05;     Grid.Nz = Grid.z/Grid.dz + 1;
+
+x = linspace(0, Grid.x, Grid.Nx);
+z = linspace(0, Grid.z, Grid.Nz);
 
 t = 0;                  % start time
-t_end = 11;             % end time
-Grid.dt = 720;            % time step (seconds)
+t_end = 10000;             % end time
+Grid.dt = 720;          % time step (seconds)
 
 % parameters
 Fluid.por = 0.3;              % porosity
@@ -43,7 +47,7 @@ P_w = (Fluid.rho_w/1000)*9.8*Grid.z + 1.01*10^5;     % water pressure
 
 
 % initial values
-% initial temperature
+% initial temperature (Kelvin)
 T = (10+273.15)*ones(Grid.Nz,Grid.Nx);     
 
 % sink term that represents the heat comsumed by co-boiling
@@ -56,16 +60,13 @@ S_w = ones(Grid.Nz,Grid.Nx) - S_n;    % initial NAPL saturation
 
 % heat flux due to the heaters
 f = zeros(Grid.Nz, Grid.Nx);
-
-for i = 1:4
-   f(:,50*i-49) = -(20/0.15)*ones(1,Grid.Nz);
-   f(:,50*i) = (20/0.15)*ones(1,Grid.Nz);
-end
+f_l = -(20/0.15);
+f_r = (20/0.15);
 
 % initial K_e
 K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));      
 
-% initial thermasel conductivity
+% initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;      
 
 % initial heat capacity
@@ -83,18 +84,19 @@ V_n = S_n * Fluid.por * Grid.dx * Grid.dz;
 n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
 n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
 
+n_gn = zeros(Grid.Nz, Grid.Nx);
+n_gw = zeros(Grid.Nz, Grid.Nx);
+
 times = [t];
 temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 
+log_array = zeros(size(T));
+
 %%
-while t <= 200000
+while t < 1300000
     
     % compute temp
-    for i = 1:4
-       T(:,(50*i-49):50*i) = temp(Grid, T(:,(50*i-49):50*i), Q(:,(50*i-49):50*i),...
-           lambda(:,(50*i-49):50*i), heat_cap(:,(50*i-49):50*i),...
-           f(:,(50*i-49):50*i));
-    end
+    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
     
     % compute vapor pressure using Antoine eqn
     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
@@ -112,10 +114,10 @@ while t <= 200000
          
          %P_wv = P_wv .* log_array; P_nv = P_nv .* log_array;
          
-         n_gn = Q./ (Fluid.L_w*(P_wv./P_nv) +...
+         n_gn = n_gn + Q./ (Fluid.L_w*(P_wv./P_nv) +...
              Fluid.L_n*ones(size(Q)));
-         n_gn = 0.0015*Grid.dt*n_gn;
-         n_gw = n_gn.*(P_wv./P_nv);
+         %n_gn = 0.0015*Grid.dt*n_gn;
+         n_gw = n_gw + n_gn.*(P_wv./P_nv);
          
          n_gn = n_gn .* log_array; n_gw = n_gw .* log_array;
         
@@ -142,11 +144,12 @@ while t <= 200000
          % update saturations
          S_n = V_n / 0.0015;
          S_w = V_w / 0.0015;
-%         S_g = ones(size(S_g)) - (S_n + S_w);
-         S_g = (V_gn + V_gw)/0.0015;
+         S_g = ones(size(S_g)) - (S_n + S_w);
+%         S_g = (V_gn + V_gw)/0.0015;
          
          % macro-IP
          if max(max(S_g)) > Fluid.S_gcr
+             %break
              clusters = propagate(S_g, Fluid.S_gcr);
          end
          
@@ -170,14 +173,16 @@ end
 T = T - 273.15*ones(Grid.Nz,Grid.Nx);
 
 figure(1)
-x = linspace(0,20,200);
-z = linspace(0,5,100);
 [xx,zz]=meshgrid(x,z);
-surf(xx,zz,flip(T,1))
-view(0,90)
+[cs, hs] = contourf(xx,zz,flip(T,1));
+set(hs,'EdgeColor','none')
 colorbar
-%caxis([10 600])
-%colormap(jet)
+caxis([10 600])
+colormap(jet)
 
 figure(2)
 plot(times, temps, 'Linewidth', 4)
+xlabel('t (seconds')
+ylabel('Temperature (celsius)')
+set(gca, 'Fontsize', 20)
+

@@ -43,8 +43,8 @@ Fluid.sigma = 0.0623;   % interfacial tension of air/water
 Fluid.P_cdim = 0.18557;                         % dimless cap pressure
 Fluid.P_D = Fluid.P_cdim*Fluid.sigma*...
     (Fluid.por/Fluid.k)^(0.5);                  % displacement pressure
-P_w = (Fluid.rho_w/1000)*9.8*Grid.z + 1.01*10^5;     % water pressure
 
+P_w = (Fluid.rho_w/1000)*9.8*Grid.z + 1.01*10^5;     % water pressure
 
 % initial values
 % initial temperature (Kelvin)
@@ -57,14 +57,18 @@ Q = zeros(Grid.Nz, Grid.Nx);
 S_g = zeros(Grid.Nz,Grid.Nx);         % initial gas saturation
 S_n = 0.01*ones(Grid.Nz,Grid.Nx);     % initial water saturation
 S_w = ones(Grid.Nz,Grid.Nx) - S_n;    % initial NAPL saturation
-
+%%
 % heat flux due to the heaters
 f = zeros(Grid.Nz, Grid.Nx);
 f_l = -(20/0.15);
 f_r = (20/0.15);
 
+% intital local gas pressure
+P_g = ((S_w - Fluid.S_r*ones(size(S_w)))./((1-Fluid.S_r)*ones(size(S_w))...
+    -S_w)).^(-1/Fluid.Lambda).*Fluid.P_D + P_w;
+
 % initial K_e
-K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));      
+K_e = (kappa*(ones(size(S_g)) - S_g))./(1 + (kappa - 1)*(1 - S_g));      
 
 % initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;      
@@ -93,7 +97,7 @@ temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 log_array = zeros(size(T));
 
 %%
-while t < 1300000
+while t < 86400
     
     % compute temp
     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
@@ -107,16 +111,19 @@ while t < 1300000
     % check if T reaches co-boiling temp
     if max(max(P_wv + P_nv)) >= (P_w + Fluid.P_D)
         
-         %Q = lambda .* del2(T);
+         % Compute the heat source/sink term
+         % Issues with Q, so need to look over this again
          Q = gradient(lambda.* gradient(T));
         
          log_array = P_wv + P_nv >= (P_w + Fluid.P_D);
+         
+         Q = Q .*log_array;
          
          %P_wv = P_wv .* log_array; P_nv = P_nv .* log_array;
          
          n_gn = n_gn + Q./ (Fluid.L_w*(P_wv./P_nv) +...
              Fluid.L_n*ones(size(Q)));
-         %n_gn = 0.0015*Grid.dt*n_gn;
+%         n_gn = 0.0015*Grid.dt*n_gn;
          n_gw = n_gw + n_gn.*(P_wv./P_nv);
          
          n_gn = n_gn .* log_array; n_gw = n_gw .* log_array;
@@ -138,6 +145,7 @@ while t < 1300000
 %              (Grid.dx * Grid.dz * Grid.dt);
          
          % compute volume of gas using the ideal gas law
+         % NOTE: These are incorrect and need to be changed
          V_gn = 8.314462*(n_gn.*T) ./ P_nv;         % NAPL vapor
          V_gw = 8.314462*(n_gw.*T) ./ P_wv;         % water vapor
          
@@ -182,7 +190,21 @@ colormap(jet)
 
 figure(2)
 plot(times, temps, 'Linewidth', 4)
-xlabel('t (seconds')
+xlabel('t (seconds)')
 ylabel('Temperature (celsius)')
 set(gca, 'Fontsize', 20)
+title('Average temperature')
 
+% figure(3)
+% subplot(2,1,1);
+% contourf(xx,zz,S_g,[.1 .2 .5]);
+% 
+% subplot(2,1,2);
+% contourf(xx,zz,S_g,[.1 .2 .5]);
+% 
+% hold on;
+% N = size(clusters);
+% 
+% for i = 1:N(2)
+%     plot(xx(clusters(:,i)==1),zz(clusters(:,i)==1), '.', 'MarkerSize',20)
+% end

@@ -1,17 +1,18 @@
 clear variables;
 % Numerical simulation as described in Mumford (2020)
 
-
 % domain
-Grid.x = 5;     Grid.dx = 0.1;      Grid.Nx = Grid.x/Grid.dx + 1;
-Grid.z = 5;     Grid.dz = 0.05;     Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
 
-t = 0;                  % start time
+[xx,zz]=meshgrid(x,z);
+
+t = 0;                     % start time
 t_end = 10000;             % end time
-Grid.dt = 720;          % time step (seconds)
+Grid.dt = 720;             % time step (seconds)
 
 % parameters
 Fluid.por = 0.3;              % porosity
@@ -35,43 +36,44 @@ kappa = 1.9;            % soil texture dependent parameter
 
 Fluid.Lambda = 2.5;           % por size distribution index
 
-Fluid.S_r = 0.13;       % residual wetting saturation
-Fluid.S_gcr = 0.15;     % critical gas saturation
+% Fluid.S_r = 0.13;       % residual wetting saturation
+% Fluid.S_gcr = 0.15;     % critical gas saturation
 
 Fluid.sigma = 0.0623;   % interfacial tension of air/water
 
-Fluid.P_cdim = 0.18557;                         % dimless cap pressure
-Fluid.P_D = Fluid.P_cdim*Fluid.sigma*...
-    (Fluid.por/Fluid.k)^(0.5);                  % displacement pressure
+P_cdim = 0.18557;                                   % dimless cap pressure
+Fluid.P_D = P_cdim*Fluid.sigma*...
+    (Fluid.por/Fluid.k)^(0.5);                      % displacement pressure
 
-P_w = (Fluid.rho_w/1000)*9.8*Grid.z + 1.01*10^5;     % water pressure
+P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
+    .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
 
 % initial values
 % initial temperature (Kelvin)
 T = (10+273.15)*ones(Grid.Nz,Grid.Nx);     
 
 % sink term that represents the heat comsumed by co-boiling
-Q = zeros(Grid.Nz, Grid.Nx);      
+Q = zeros(Grid.Nz, Grid.Nx);    
 
 % Initial saturations
-S_g = zeros(Grid.Nz,Grid.Nx);         % initial gas saturation
-S_n = 0.01*ones(Grid.Nz,Grid.Nx);     % initial water saturation
-S_w = ones(Grid.Nz,Grid.Nx) - S_n;    % initial NAPL saturation
-%%
-% heat flux due to the heaters
-f = zeros(Grid.Nz, Grid.Nx);
-f_l = -(20/0.15);
-f_r = (20/0.15);
+S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
+S_n = 0.01*ones(Grid.Nz,Grid.Nx);       % initial water saturation
+S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
+Fluid.S_r = 0.13;                             % residual wetting saturation
+Fluid.S_gcr = 0.15;                           % critical gas saturation
 
-% intital local gas pressure
-P_g = ((S_w - Fluid.S_r*ones(size(S_w)))./((1-Fluid.S_r)*ones(size(S_w))...
-    -S_w)).^(-1/Fluid.Lambda).*Fluid.P_D + P_w;
+% heat flux due to the heaters
+f_l = -10/(0.15);
+f_r = 0;
 
 % initial K_e
-K_e = (kappa*(ones(size(S_g)) - S_g))./(1 + (kappa - 1)*(1 - S_g));      
+K_e = (kappa*(ones(size(S_g)) - S_g))./(1 + (kappa - 1)*(1 - S_g));   
+
+%ep = rand(size(T));
+ep = 0 * ones(size(T));
 
 % initial thermal conductivity
-lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;      
+lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry + ep;   
 
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -88,16 +90,11 @@ V_n = S_n * Fluid.por * Grid.dx * Grid.dz;
 n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
 n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
 
-n_gn = zeros(Grid.Nz, Grid.Nx);
-n_gw = zeros(Grid.Nz, Grid.Nx);
-
 times = [t];
 temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 
-log_array = zeros(size(T));
-
 %%
-while t < 86400
+while t < 500000
     
     % compute temp
     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
@@ -108,58 +105,57 @@ while t < 86400
     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
         ./(T - 46.29*ones(size(T))));
     
+    co_boil = (P_wv + P_nv) >= ((P_w + Fluid.P_D*ones(size(T))) + ...
+        10*cos(t/100)*ones(size(T)));
+    
     % check if T reaches co-boiling temp
-    if max(max(P_wv + P_nv)) >= (P_w + Fluid.P_D)
+    if any(co_boil, 'all') == 1
         
          % Compute the heat source/sink term
-         % Issues with Q, so need to look over this again
-         Q = gradient(lambda.* gradient(T));
-        
-         log_array = P_wv + P_nv >= (P_w + Fluid.P_D);
-         
-         Q = Q .*log_array;
-         
-         %P_wv = P_wv .* log_array; P_nv = P_nv .* log_array;
-         
-         n_gn = n_gn + Q./ (Fluid.L_w*(P_wv./P_nv) +...
-             Fluid.L_n*ones(size(Q)));
-%         n_gn = 0.0015*Grid.dt*n_gn;
-         n_gw = n_gw + n_gn.*(P_wv./P_nv);
-         
-         n_gn = n_gn .* log_array; n_gw = n_gw .* log_array;
-        
-         
-         % update moles and volume of NAPL and water (liquid phase)
+         Q = gradient(lambda.* gradient(T)) .* co_boil;
 
-         n_n = n_n - n_gn;
-         n_n = n_n .* (n_n >= 0);
-        
-         n_w = n_w - n_gw;
-         n_w = n_w .* (n_w >= 0);
+         % compute the moles of vapor produced using the energy
+         % balance equation and Dalton's law
+         n_gn = (Q./ (Fluid.L_w*(P_wv./P_nv) +...
+             Fluid.L_n*ones(size(Q))));                 % energy balance
+         n_gw = n_gn.*(P_wv./P_nv);                     % Dalton's law
+         
+         
+         % Compute capillary and gas pressures
+         % capillary pressure
+         P_c = Fluid.P_D * ((max(S_w,Fluid.S_r) - Fluid.S_r*...
+             ones(size(S_w)))./((1-Fluid.S_r)...
+             *ones(size(S_w))-S_n)).^(-1/Fluid.Lambda);
 
-         V_n = 131.4*n_n / Fluid.rho_n;
-         V_w = 18.01528*n_w / Fluid.rho_w;
-         
-         % compute Q
-%          Q = (Fluid.L_w * (n_gw+n_gn) + Fluid.L_n * (n_gw+n_gn)) /...
-%              (Grid.dx * Grid.dz * Grid.dt);
-         
+         % local gas pressure   
+         P_g =  P_c + P_w;
+
          % compute volume of gas using the ideal gas law
-         % NOTE: These are incorrect and need to be changed
-         V_gn = 8.314462*(n_gn.*T) ./ P_nv;         % NAPL vapor
-         V_gw = 8.314462*(n_gw.*T) ./ P_wv;         % water vapor
+         V_gn = (8.314462*(n_gn.*T) ./ P_g);       % NAPL vapor
          
+         if min(min(V_n - V_gn)) < 0
+            V_gn =  V_gn .* (V_n > V_gn) + V_n .* (V_n < V_gn);
+         end
+         
+         V_gw = (8.314462*(n_gw.*T) ./ P_g);       % water vapor
+         
+         if min(min(V_w - V_gw)) < 0
+            V_gw =  V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
+         end
+         
+         V_n = (V_n - V_gn) .* (V_n >= V_gn);
+         V_w = (V_w - V_gw) .* (V_w >= V_gw);
+      
          % update saturations
          S_n = V_n / 0.0015;
          S_w = V_w / 0.0015;
-         S_g = ones(size(S_g)) - (S_n + S_w);
-%         S_g = (V_gn + V_gw)/0.0015;
-         
+         S_g = S_g + (V_gw + V_gn)/0.0015;
+              
          % macro-IP
-         if max(max(S_g)) > Fluid.S_gcr
-             %break
-             clusters = propagate(S_g, Fluid.S_gcr);
-         end
+%          if max(max(S_g)) > Fluid.S_gcr
+%              clusters = propagate(S_g, Fluid.S_gcr);
+%              break
+%          end
          
          % update heat capacity
          heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -169,7 +165,6 @@ while t < 86400
          % update thermal conductivity
          K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
-
     end
 
     t = t + Grid.dt;
@@ -181,7 +176,6 @@ end
 T = T - 273.15*ones(Grid.Nz,Grid.Nx);
 
 figure(1)
-[xx,zz]=meshgrid(x,z);
 [cs, hs] = contourf(xx,zz,flip(T,1));
 set(hs,'EdgeColor','none')
 colorbar

@@ -16,9 +16,9 @@ Grid.dt = 720;             % time step (seconds)
 
 % parameters
 Fluid.por = 0.3;              % porosity
-Fluid.k = 1.03151e-12;        % permeability
+% Fluid.k = 1.03151e-12;        % permeability
 % ln(k) has mean -27.6 and variance 2 (moderate heterogeneity)
-% Fluid.k = exp(-27.6 + sqrt(2)*randn(Grid.Nz, Grid.Nx));
+Fluid.k = exp(-27.6 + sqrt(2)*randn(Grid.Nz, Grid.Nx));
 
 Fluid.C_pw = 4.184/1000;           % heat capacity of water
 Fluid.C_pn = 0.958/1000;           % heat capacity of TCE
@@ -95,13 +95,12 @@ n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
 times = [t];
 temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 
-
-% v = VideoWriter('gasFlow_unif2.avi')
+% v = VideoWriter('gasFlow_nonunif_perm2.avi')
 % open(v);
 
 %%
 
-while t < 2000000
+while t < 3000000
     
     % compute temp
     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
@@ -111,9 +110,9 @@ while t < 2000000
     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
         ./(T - 83.445*ones(size(T)))) .* (S_n ~= 0);
     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
-        ./(T - 46.29*ones(size(T))));
+        ./(T - 46.29*ones(size(T)))) .* (S_w ~= 0);
     
-    co_boil = ((P_wv + (P_nv.*(S_n ~= 0))) >= (P_w + Fluid.P_D));
+    co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
         
     % check if T reaches co-boiling temp
     if any(co_boil, 'all') == 1
@@ -129,12 +128,12 @@ while t < 2000000
 %          T_x(:,1) = f_l;    T_x(:,end) = f_r;
 %          T_z(1,:) = 0;      T_z(end,:) = 0;
 
-         T_l = T(:,1) - f_l*Grid.dx;      
-         T_r = T(:,end) + f_r*Grid.dx;
+         T_l = T(:,2) - 2*f_l*Grid.dx;      
+         T_r = T(:,end-1) + 2*f_r*Grid.dx;
          
          T1 = [T_l, T, T_r];
          
-         T_t = T1(1,:);  T_b = T1(end,:);
+         T_t = T1(2,:);  T_b = T1(end-1,:);
          
          T1 = [T_t; T1; T_b];
          
@@ -148,8 +147,8 @@ while t < 2000000
          % uses a one sided difference at the boundary.
 %          div_gradT = divergence(xx, zz, T_x, T_z);
          
-         lambda1 = [lambda(:,1), lambda, lambda(:,end)];
-         lambda1 = [lambda1(1,:); lambda1; lambda1(end,:)];
+         lambda1 = [lambda(:,2), lambda, lambda(:,end-1)];
+         lambda1 = [lambda1(2,:); lambda1; lambda1(end-1,:)];
          
          [lambda_x, lambda_z] = gradient(lambda1,[-Grid.dx, x,...
              Grid.dx + Grid.x],[-Grid.dz, z, Grid.dz + Grid.z]);
@@ -159,8 +158,8 @@ while t < 2000000
    
 %          [lambda_x, lambda_z] = gradient(lambda,x,z);
          
-         gradT_gradl = T_x.*lambda_x + T_z.*lambda_z;
-%          gradT_gradl = dot(cat(3,T_x,T_x),cat(3,lambda_x, lambda_z),3);
+%          gradT_gradl = T_x.*lambda_x + T_z.*lambda_z;
+         gradT_gradl = dot(cat(3,T_x,T_z),cat(3,lambda_x, lambda_z),3);
          
 %          laplace_T = del2(T, x, z);
 
@@ -184,6 +183,7 @@ while t < 2000000
          n_gn = n_gw.*P_nv./P_wv;                     % Dalton's law
          
          n_gn = n_gn .* co_boil;        n_gw = n_gw .* co_boil;
+         n_gn(isnan(n_gn)) = 0;         n_gw(isnan(n_gw)) = 0;
          
          % Compute capillary and gas pressures
          % EDIT: there's a separate function for computing P_c and P_g
@@ -242,12 +242,12 @@ while t < 2000000
 %              writeVideo(v, frame);
              
 %              break
-%              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
-%                  co_boil, Fluid, Grid);
+             [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
+                 co_boil, Fluid, Grid);
 %              
-%              figure(3)
-%              colormap([1 1 1; 0 0 1]);
-%              image((S_g > Fluid.S_gcr) .* 255);
+             figure(3)
+             colormap([1 1 1; 0 0 1]);
+             image((S_g > Fluid.S_gcr) .* 255);
              
 %              frame =  getframe(gcf);
 %              writeVideo(v, frame);

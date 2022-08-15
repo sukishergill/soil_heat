@@ -16,9 +16,9 @@ Grid.dt = 720;             % time step (seconds)
 
 % parameters
 Fluid.por = 0.3;              % porosity
-% Fluid.k = 1.03151e-12;        % permeability
+Fluid.k = 1.03151e-12;        % permeability
 % ln(k) has mean -27.6 and variance 2 (moderate heterogeneity)
-Fluid.k = exp(-27.6 + sqrt(2)*randn(Grid.Nz, Grid.Nx));
+% Fluid.k = exp(-27.6 + sqrt(2)*randn(Grid.Nz, Grid.Nx));
 
 Fluid.C_pw = 4.184/1000;           % heat capacity of water
 Fluid.C_pn = 0.958/1000;           % heat capacity of TCE
@@ -83,7 +83,7 @@ heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
     (1-Fluid.por)*Fluid.rho_s*Fluid.C_ps; 
 
 % volume of water and NAPL
-V_w = S_w * V_cell;
+V_w = (S_w - Fluid.S_r) * V_cell;
 V_n = S_n * V_cell;
 
 % molar mass of water: 18.01528 g/mol
@@ -95,27 +95,49 @@ n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
 times = [t];
 temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 
+% w = VideoWriter('coboil_cells_unif_perm_Sn025.avi')
+% open(w);
+
 % v = VideoWriter('gasFlow_nonunif_perm2.avi')
 % open(v);
+old_T = T;
+% co_boil = zeros(size(T));
+
+Tdata = [T(1,1)];
 
 %%
 
-while t < 3000000
-    
+while t < 4000000
+     
     % compute temp
     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+    
+    Tdata = [Tdata; T(1,1)];
     
     % compute vapor pressure using Antoine eqn
     % EDIT: P_nv = 0 if no NAPL is present in the cell
     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
-        ./(T - 83.445*ones(size(T)))) .* (S_n ~= 0);
+        ./(T - 83.445*ones(size(T))));% .* (S_n ~= 0);
     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
-        ./(T - 46.29*ones(size(T)))) .* (S_w ~= 0);
+        ./(T - 46.29*ones(size(T))));% .* (S_w ~= 0);
+   
     
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
+    
+%     co_boil = co_boil + ((P_wv + P_nv) >= (P_w + Fluid.P_D));
+    
+%     co_boil = co_boil > 0;
+    
+    figure(4)
+    colormap([1 1 1; 0 0 1]);
+    image((co_boil) .* 255);
+    
+%     frame =  getframe(gcf);
+%     writeVideo(w, frame);
         
     % check if T reaches co-boiling temp
     if any(co_boil, 'all') == 1
+        
         
          % Compute Q which is given by Q = div(lambda * grad(T))
          
@@ -176,6 +198,9 @@ while t < 3000000
          % Q = 0
          Q = Q .* co_boil;
          
+         Q = Q .* (Q > 0);
+%          Q_p = Q .* (Q > 0);
+         
          % compute the moles of vapor produced using the energy
          % balance equation and Dalton's law Grid.dx*Grid.dz*Grid.dt
          n_gw = ((Q*Grid.dx*Grid.dz*Grid.dt)./ (Fluid.L_n*(P_nv./P_wv) +...
@@ -205,21 +230,21 @@ while t < 3000000
          
          % S_w can only be in the range [S_r, 1] so the volume of water can
          % only be within the range for those S_w values
-         if min(min(V_w - V_gw)) < (V_cell * Fluid.S_r)
-%          if min(min(V_w - V_gw)) < 0
+%          if min(min(V_w - V_gw)) < (V_cell * Fluid.S_r)
+         if min(min(V_w - V_gw)) < 0
             
-%             V_gw = V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
+            V_gw = V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
 
-            V_gw =  V_gw .* ((V_w - V_gw) > (V_cell*Fluid.S_r)) + ...
-                V_w .* ((V_w - V_gw) < (V_cell*Fluid.S_r));
+%             V_gw =  V_gw .* ((V_w - V_gw) > (V_cell*Fluid.S_r)) + ...
+%                 V_w .* ((V_w - V_gw) < (V_cell*Fluid.S_r));
          end
          
          V_n = (V_n - V_gn) .* (V_n >= V_gn);
-         V_w = (V_w - V_gw) .* ((V_w - V_gw) >= (V_cell*Fluid.S_r));
+         V_w = (V_w - V_gw) .* (V_w >= V_gw);
       
          % update saturations
          S_n = V_n / V_cell;
-         S_w = V_w / V_cell;
+         S_w = (V_w / V_cell) + Fluid.S_r;
          S_g = S_g + (V_gw + V_gn)/V_cell;
          
          % Compute capillary and gas pressures
@@ -254,7 +279,7 @@ while t < 3000000
              
              % we will need to recompute the volume of water since it will
              % move around in the cell
-             V_w = S_w * V_cell;
+             V_w = (S_w - Fluid.S_r) * V_cell;
              
          end
               
@@ -267,16 +292,19 @@ while t < 3000000
          K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
          
-         old_T = T;
+         
     end
 
     t = t + Grid.dt;
+    
+    old_T = T;
     
     times = [times; t];
     temps = [temps; mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
 end
 
 % close(v);
+% close(w);
 
 T = T - 273.15*ones(Grid.Nz,Grid.Nx);
 

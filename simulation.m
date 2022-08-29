@@ -2,7 +2,7 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.025;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
 Grid.x = 2.5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
@@ -106,24 +106,24 @@ old_T = T;
 
 Tdata = [T(1,1)];
 
-Tn = T;
-Tn1 = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
-
-
-heater_bound = zeros(size(T));
-heater_bound(:,1) = 1;      heater_bound(:,end) = 1;
+% Tn = T;
+% Tn1 = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
+% 
+% 
+% heater_bound = zeros(size(T));
+% heater_bound(:,1) = 1;      heater_bound(:,end) = 1;
 
 %%
 
-while t < 2000000
+while t < 2160000
     
     t = t + Grid.dt;
      
     % compute temp
-%     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
 
-    T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
-    heat_cap, f_l, f_r);
+%     T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
+%     heat_cap, f_l, f_r);
 
     Tn = Tn1;    Tn1 = T;
     
@@ -292,6 +292,10 @@ while t < 2000000
              V_w = (S_w - Fluid.S_r) * V_cell;
              
          end
+         
+         % update moles of water and NAPL
+         n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
+         n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
               
          % update heat capacity
          heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...

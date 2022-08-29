@@ -2,8 +2,8 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
-Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 5;     Grid.dz = 0.025;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.x = 2.5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
@@ -68,8 +68,9 @@ Fluid.S_gcr = 0.15;                           % critical gas saturation
 
 % heat flux due to the heaters
 f_l = -10/0.15;
-f_r = 10/0.15;
-% f_l = 0;    f_r = 0;
+% f_r = 10/0.15;
+% f_l = 0; 
+f_r = 0;
 
 % initial K_e
 K_e = (kappa*(ones(size(S_g)) - S_g))./(1 + (kappa - 1)*(1 - S_g));   
@@ -93,33 +94,47 @@ n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
 n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
 
 times = [t];
-temps = [mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
+temps = [mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
 
 % w = VideoWriter('coboil_cells_unif_perm_Sn025.avi')
 % open(w);
 
-% v = VideoWriter('gasFlow_nonunif_perm2.avi')
+% v = VideoWriter('gasFlow_unif_perm_nonMIP_2.avi')
 % open(v);
 old_T = T;
 % co_boil = zeros(size(T));
 
 Tdata = [T(1,1)];
 
+Tn = T;
+Tn1 = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
+
+
+heater_bound = zeros(size(T));
+heater_bound(:,1) = 1;      heater_bound(:,end) = 1;
+
 %%
 
-while t < 4000000
+while t < 2000000
+    
+    t = t + Grid.dt;
      
     % compute temp
-    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+%     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+
+    T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
+    heat_cap, f_l, f_r);
+
+    Tn = Tn1;    Tn1 = T;
     
     Tdata = [Tdata; T(1,1)];
     
     % compute vapor pressure using Antoine eqn
     % EDIT: P_nv = 0 if no NAPL is present in the cell
     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
-        ./(T - 83.445*ones(size(T))));% .* (S_n ~= 0);
+        ./(T - 83.445*ones(size(T)))) .* (S_n ~= 0);
     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
-        ./(T - 46.29*ones(size(T))));% .* (S_w ~= 0);
+        ./(T - 46.29*ones(size(T)))) .* (S_w > Fluid.S_r);
    
     
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
@@ -198,12 +213,12 @@ while t < 4000000
          % Q = 0
          Q = Q .* co_boil;
          
-         Q = Q .* (Q > 0);
-%          Q_p = Q .* (Q > 0);
+%          Q = Q .* (Q > 0);
+         Q_p = Q .* (Q > 0);
          
          % compute the moles of vapor produced using the energy
          % balance equation and Dalton's law Grid.dx*Grid.dz*Grid.dt
-         n_gw = ((Q*Grid.dx*Grid.dz*Grid.dt)./ (Fluid.L_n*(P_nv./P_wv) +...
+         n_gw = ((Q_p*Grid.dx*Grid.dz*Grid.dt)./ (Fluid.L_n*(P_nv./P_wv) +...
              Fluid.L_w*ones(size(Q))));                 % energy balance
          n_gn = n_gw.*P_nv./P_wv;                     % Dalton's law
          
@@ -230,13 +245,8 @@ while t < 4000000
          
          % S_w can only be in the range [S_r, 1] so the volume of water can
          % only be within the range for those S_w values
-%          if min(min(V_w - V_gw)) < (V_cell * Fluid.S_r)
          if min(min(V_w - V_gw)) < 0
-            
             V_gw = V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
-
-%             V_gw =  V_gw .* ((V_w - V_gw) > (V_cell*Fluid.S_r)) + ...
-%                 V_w .* ((V_w - V_gw) < (V_cell*Fluid.S_r));
          end
          
          V_n = (V_n - V_gn) .* (V_n >= V_gn);
@@ -269,14 +279,14 @@ while t < 4000000
 %              break
              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
                  co_boil, Fluid, Grid);
+% %              
+%              figure(3)
+%              colormap([1 1 1; 0 0 1]);
+%              image((S_g > Fluid.S_gcr) .* 255);
 %              
-             figure(3)
-             colormap([1 1 1; 0 0 1]);
-             image((S_g > Fluid.S_gcr) .* 255);
-             
 %              frame =  getframe(gcf);
 %              writeVideo(v, frame);
-             
+%              
              % we will need to recompute the volume of water since it will
              % move around in the cell
              V_w = (S_w - Fluid.S_r) * V_cell;
@@ -295,12 +305,12 @@ while t < 4000000
          
     end
 
-    t = t + Grid.dt;
+%     t = t + Grid.dt;
     
     old_T = T;
     
     times = [times; t];
-    temps = [temps; mean2(T - 273.15*ones(Grid.Nz,Grid.Nx))];
+    temps = [temps; mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
 end
 
 % close(v);
@@ -321,17 +331,3 @@ T = T - 273.15*ones(Grid.Nz,Grid.Nx);
 % ylabel('Temperature (celsius)')
 % set(gca, 'Fontsize', 20)
 % title('Average temperature')
-
-% figure(3)
-% subplot(2,1,1);
-% contourf(xx,zz,S_g,[.1 .2 .5]);
-% 
-% subplot(2,1,2);
-% contourf(xx,zz,S_g,[.1 .2 .5]);
-% 
-% hold on;
-% N = size(clusters);
-% 
-% for i = 1:N(2)
-%     plot(xx(clusters(:,i)==1),zz(clusters(:,i)==1), '.', 'MarkerSize',20)
-% end

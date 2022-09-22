@@ -3,7 +3,7 @@ clear variables;
 
 % domain
 Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
-Grid.x = 2.5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
@@ -47,6 +47,13 @@ Fluid.P_D = P_cdim*Fluid.sigma*...
 P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
     .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
 
+% P_w = 9.8*(25000/1000)*(ones(Grid.Nz,Grid.Nx)...
+%     .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx); 
+
+% P_w = 9.8*(25000/1000)*(ones(Grid.Nz,Grid.Nx)...
+%      .*z' - 2.5) + 1.255*10^5*ones(Grid.Nz,Grid.Nx);
+
+% uniform water pressure
 % P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx))...
 %     + 1.01*10^5*ones(Grid.Nz,Grid.Nx);                  % water pressure
 
@@ -61,7 +68,7 @@ Q = zeros(Grid.Nz, Grid.Nx);
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
-S_n = 0.01*ones(Grid.Nz,Grid.Nx);       % initial water saturation
+S_n = 0.1*ones(Grid.Nz,Grid.Nx);       % initial water saturation
 S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
 Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
@@ -99,31 +106,63 @@ temps = [mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
 % w = VideoWriter('coboil_cells_unif_perm_Sn025.avi')
 % open(w);
 
-% v = VideoWriter('gasFlow_unif_perm_nonMIP_2.avi')
+% v = VideoWriter('gasFlow_unif_perm.avi')
 % open(v);
 old_T = T;
 % co_boil = zeros(size(T));
 
 Tdata = [T(1,1)];
 
-% Tn = T;
-% Tn1 = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
+Tn = T;
+Tn1 = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
+
+% cb_time = [];
+% cb_temp = [];
 % 
-% 
-% heater_bound = zeros(size(T));
-% heater_bound(:,1) = 1;      heater_bound(:,end) = 1;
+
+% define left and right extractors (this is subject to change as cells
+% dry out)
+extractor_l = cell(Grid.Nz, 1);
+extractor_r = cell(Grid.Nz, 1);
+for i = 1:Grid.Nz
+    extractor_l{i,1} = [i, 1];
+    extractor_r{i,1} = [i, Grid.Nx];
+end
+    
+Sg_vals = [];   t_Sg = [];
+
+cb = 0;
+
+[A, rhsvec] = compute_A(Grid, lambda,...
+    heat_cap, f_l, f_r);
+
+[L,U] = lu(A);
+
+% i = 1;
 
 %%
 
-while t < 2160000
+while t < 4000000
     
     t = t + Grid.dt;
      
     % compute temp
-    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+%     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
 
-%     T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
-%     heat_cap, f_l, f_r);
+    if cb == 0
+        T_0 = reshape(Tn', Grid.Nx*Grid.Nz, 1);    
+        T_1 = reshape(Tn1', Grid.Nx*Grid.Nz, 1);
+        T = reshape(T', Grid.Nx*Grid.Nz, 1);
+       
+        T = U \ (L \ (2*T_1 - 0.5*T_0 - rhsvec));
+        
+        T = reshape(T, Grid.Nx, Grid.Nz)';
+    else
+        
+        T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
+           heat_cap, f_l, f_r);
+        
+    end
 
     Tn = Tn1;    Tn1 = T;
     
@@ -143,9 +182,9 @@ while t < 2160000
     
 %     co_boil = co_boil > 0;
     
-    figure(4)
-    colormap([1 1 1; 0 0 1]);
-    image((co_boil) .* 255);
+%     figure(4)
+%     colormap([1 1 1; 0 0 1]);
+%     image((co_boil) .* 255);
     
 %     frame =  getframe(gcf);
 %     writeVideo(w, frame);
@@ -153,7 +192,14 @@ while t < 2160000
     % check if T reaches co-boiling temp
     if any(co_boil, 'all') == 1
         
+        cb = 1;
         
+%         if co_boil(i,1) == 1
+%             cb_time = [cb_time; t];
+%             cb_temp = [cb_temp; T(i,1)];
+%             i = i+1;
+%         end
+%         
          % Compute Q which is given by Q = div(lambda * grad(T))
          
          % Gradient of T
@@ -276,20 +322,51 @@ while t < 2160000
 %              frame =  getframe(gcf);
 %              writeVideo(v, frame);
              
-%              break
              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
-                 co_boil, Fluid, Grid);
-% %              
-%              figure(3)
-%              colormap([1 1 1; 0 0 1]);
-%              image((S_g > Fluid.S_gcr) .* 255);
-%              
+                 co_boil, Fluid);
+             
+             figure(3)
+             colormap([1 1 1; 0 0 1]);
+             image((S_g > Fluid.S_gcr) .* 255);
+             
+             
+             
 %              frame =  getframe(gcf);
 %              writeVideo(v, frame);
-%              
+             
              % we will need to recompute the volume of water since it will
              % move around in the cell
              V_w = (S_w - Fluid.S_r) * V_cell;
+             
+             Sg_vals = [Sg_vals; S_g(:,1)'];   t_Sg = [t_Sg; t];
+             
+         end
+         
+         % INCOMPLETE
+         % Remove NAPL and water vapor from system
+         % Since gas gets moved around in MIP it's hard to keep track of
+         % the volume of NAPL and water vapor separately. But one way is to
+         % keep track of how much liquid water and NAPL is still left in
+         % the system. 
+         
+         % check for dried out regions adjacent to extractors
+         for i = 1:Grid.Nz
+           
+             % left extractor
+             if S_w(extractor_l{i,1}(1,1), extractor_l{i,1}(1,2) + 1)...
+                     == Fluid.S_r
+                 
+                 extractor_l{i,1}(1,2) = extractor_l{i,1}(1,2) + 1;
+                 
+             end
+             
+             % right extractor
+             if S_w(extractor_r{i,1}(1,1), extractor_r{i,1}(1,2) - 1)...
+                     == Fluid.S_r
+                 
+                 extractor_r{i,1}(1,2) = extractor_r{i,1}(1,2) - 1;
+                 
+             end
              
          end
          

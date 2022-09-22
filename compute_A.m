@@ -1,13 +1,10 @@
-function Tnew = temp_v6(Grid, T1, T0, Q, lambda,...
+function [A, rhsvec] = compute_A(Grid, lambda,...
     heat_cap, f_l, f_r)
 
 
 dx = Grid.dx; dz = Grid.dz;
 Nx = Grid.Nx; Nz = Grid.Nz;
 dt = Grid.dt;
-
-Q = dt * (Q ./ heat_cap);
-Q = reshape(Q', Nx*Nz, 1);
 
 lambda = lambda';
 heat_cap = heat_cap';
@@ -80,18 +77,8 @@ asub2 = [asub2(Nx+1:end); zeros(Nx,1)];
 A = spdiags( [ asub2, asub1, a1, asup1, asup2],...
     [-Nx, -1, 0, 1, Nx], Nx*Nz, Nx*Nz);
 
-
-T0 = reshape(T0', Nx*Nz, 1);    T1 = reshape(T1', Nx*Nz, 1);
-
-[L, U] = lu(A);
-
-Tnew = U \ (L \ (2*T1 - 0.5*T0 - rhsvec - Q));
-
-% Tnew = A \ (2*T1 - 0.5*T0 - rhsvec - Q);
-
-Tnew = reshape(Tnew, Nx, Nz)';
-
 end
+
 
 function [sub1, sup1, rhs] = solve_i(i1, j1, heat_cap, lambda,...
     Nx, dx, dt, f_l, f_r)

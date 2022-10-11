@@ -5,7 +5,7 @@ Nx = size(S_g, 2);          Nz = size(S_g, 1);
 
 % IMCOMPLETE: Need to adjust gas pressure in invaded cell
 
-% T = avgCluster(T, clusters, lw, num);
+T = avgCluster(T, clusters, lw, num);
 
 for i = 1:num
     

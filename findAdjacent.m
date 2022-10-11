@@ -1,9 +1,9 @@
-function adjacent_cells = findAdjacent(cluster, Grid)
+function adjacent_cells = findAdjacent(cluster, Nx, Nz)
 
 A = sparse(cluster(:,1), cluster(:,2), ones(size(cluster,1), 1),...
-    Grid.Nz, Grid.Nx);
+    Nz, Nx);
     
-M = zeros(Grid.Nz + 2, Grid.Nx + 2);
+M = zeros(Nz + 2, Nx + 2);
 
 % shift left
 M(2:end-1, 1:end-2) = M(2:end-1, 1:end-2) + A;

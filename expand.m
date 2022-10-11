@@ -1,8 +1,7 @@
 function [MIP_cells, S_g, S_w] = expand(S_g, S_n, S_w, P_g, T_e,...
-    co_boil, clusters, MIP_cells, Grid, S_gcr)
+    co_boil, clusters, MIP_cells, S_gcr)
 
-% INCOMPLETE: after a cell has been invaded, need to increase S_g to S_gcr
-% and adjust S_w so that S_w + S_g + S_n = 1 is still satisfied
+Nx = size(S_g, 2);          Nz = size(S_g, 1);
 
 for i = 1:size(clusters,1)
     
@@ -41,7 +40,7 @@ for i = 1:size(clusters,1)
                clusters{i,1},'rows') == 0
            
           % check S cell isn't a boundary cell
-          if ((clusters{i,1}(j,1)+1) ~= Grid.Nz + 1) && ... 
+          if ((clusters{i,1}(j,1)+1) ~= Nz + 1) && ... 
                   (co_boil(clusters{i,1}(j,1)+1, clusters{i,1}(j,2)) == 1)
               
               % condition for expansion
@@ -67,7 +66,7 @@ for i = 1:size(clusters,1)
                clusters{i,1},'rows') == 0
            
           % check E cell isn't a boundary cell 
-          if ((clusters{i,1}(j,2)+1) ~= Grid.Nx + 1) && ... 
+          if ((clusters{i,1}(j,2)+1) ~= Nx + 1) && ... 
                   (co_boil(clusters{i,1}(j,1), clusters{i,1}(j,2)+1) == 1)
               
               % condition for expansion

@@ -1,14 +1,16 @@
-function [MIP_cells, S_g, S_w] =  mobilize(S_g, S_n, S_w, T_e,...
-    T_t, co_boil, clusters, MIP_cells, Grid, S_gcr)
+function [MIP_cells, S_g, S_w ,P_g] =  mobilize(S_g, S_n, S_w, T, T_e,...
+    T_t, P_g ,co_boil, clusters, MIP_cells, S_gcr, lw, num)
 
-% IMCOMPLETE: Still need to recompute the cluster after a cell is
-% invaded incase it leads to two cells colliding, or after a cell is
-% imbibed clusters could fragment.
+Nx = size(S_g, 2);          Nz = size(S_g, 1);
 
-for i = 1:size(clusters,1)
+% IMCOMPLETE: Need to adjust gas pressure in invaded cell
+
+% T = avgCluster(T, clusters, lw, num);
+
+for i = 1:num
     
     % find all boundary clusters that are adjacent to cluster
-    clust_bound = findAdjacent(clusters{i,1}, Grid);
+    clust_bound = findAdjacent(clusters{i,1}, Nx, Nz);
     
     for j = 1:size(clusters{i,1}, 1)
         
@@ -28,6 +30,14 @@ for i = 1:size(clusters,1)
     %                 S_g(clust_bound(l,1), clust_bound(l,2)) = ...
     %                     S_g(clust_bound(l,1), clust_bound(l,2)) + ...
     %                     (S_g(clusters{i,1}(j,1), clusters{i,1}(j,2)) - 0.14);
+    
+                    % Adjust the gas pressure in invaded cell using the
+                    % ideal gas law
+                    P_g(clust_bound(l,1), clust_bound(l,2)) = ...
+                        (P_g(clusters{i,1}(j,1), clusters{i,1}(j,2)) * ...
+                        S_g(clusters{i,1}(j,1), clusters{i,1}(j,2)) * ...
+                        T(clust_bound(l,1), clust_bound(l,2)) / ...
+                        (T(clusters{i,1}(j,1), clusters{i,1}(j,2))) * S_gcr);
 
                     % gas saturation in invaded cell is increased to S_gcr
                     S_g(clust_bound(l,1), clust_bound(l,2)) = S_gcr;

@@ -83,11 +83,11 @@ A = spdiags( [ asub2, asub1, a1, asup1, asup2],...
 
 T0 = reshape(T0', Nx*Nz, 1);    T1 = reshape(T1', Nx*Nz, 1);
 
-[L, U] = lu(A);
+% [L, U] = lu(A);
 
-Tnew = U \ (L \ (2*T1 - 0.5*T0 - rhsvec - Q));
+% Tnew = U \ (L \ (2*T1 - 0.5*T0 - rhsvec - Q));
 
-% Tnew = A \ (2*T1 - 0.5*T0 - rhsvec - Q);
+Tnew = A \ (2*T1 - 0.5*T0 - rhsvec - Q);
 
 Tnew = reshape(Tnew, Nx, Nz)';
 

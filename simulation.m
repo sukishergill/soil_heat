@@ -2,7 +2,7 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.z = 5;     Grid.dz = 0.05;     Grid.Nz = Grid.z/Grid.dz + 1;
 Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
@@ -36,7 +36,7 @@ lambda_dry = 0.15/1000;      % thermal conductivity of dry soil
 
 kappa = 1.9;            % soil texture dependent parameter
 
-Fluid.Lambda = 2.5;           % por size distribution index
+Fluid.Lambda = 2.5;           % pore size distribution index
 
 Fluid.sigma = 0.0623;   % interfacial tension of air/water
 
@@ -136,35 +136,43 @@ cb = 0;
 [A, rhsvec] = compute_A(Grid, lambda,...
     heat_cap, f_l, f_r);
 
-[L,U] = lu(A);
+% [L,U] = lu(A);
 
 % i = 1;
 
 %%
 
-while t < 4000000
+while t < 2592000
+    
+%     if cb == 864000
+%         Grid.dt = 360;
+%         
+%     elseif cb == 1036800
+%         Grid.dt = 180;
+%     end
     
     t = t + Grid.dt;
      
     % compute temp
-%     T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
 
-    if cb == 0
-        T_0 = reshape(Tn', Grid.Nx*Grid.Nz, 1);    
-        T_1 = reshape(Tn1', Grid.Nx*Grid.Nz, 1);
-        T = reshape(T', Grid.Nx*Grid.Nz, 1);
-       
-        T = U \ (L \ (2*T_1 - 0.5*T_0 - rhsvec));
-        
-        T = reshape(T, Grid.Nx, Grid.Nz)';
-    else
-        
-        T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
-           heat_cap, f_l, f_r);
-        
-    end
-
-    Tn = Tn1;    Tn1 = T;
+% BDF2
+%     if cb == 0
+%         T_0 = reshape(Tn', Grid.Nx*Grid.Nz, 1);    
+%         T_1 = reshape(Tn1', Grid.Nx*Grid.Nz, 1);
+%         T = reshape(T', Grid.Nx*Grid.Nz, 1);
+% 
+%         T = A \ (2*T_1 - 0.5*T_0 - rhsvec);
+%         
+%         T = reshape(T, Grid.Nx, Grid.Nz)';
+%     else
+%         
+%          T = temp_v6(Grid, Tn1, Tn, Q, lambda,...
+%            heat_cap, f_l, f_r);
+%        
+%     end
+% 
+%     Tn = Tn1;    Tn1 = T;
     
     Tdata = [Tdata; T(1,1)];
     
@@ -405,6 +413,7 @@ T = T - 273.15*ones(Grid.Nz,Grid.Nx);
 % colorbar
 % caxis([10 600])
 % colormap(jet)
+% set(gca, 'Fontsize', 20)
 
 % figure(2)
 % plot(times, temps, 'Linewidth', 4)

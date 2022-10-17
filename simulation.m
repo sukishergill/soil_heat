@@ -272,7 +272,7 @@ while t < 2592000
          
          % compute the moles of vapor produced using the energy
          % balance equation and Dalton's law Grid.dx*Grid.dz*Grid.dt
-         n_gw = ((Q_p*Grid.dx*Grid.dz*Grid.dt)./ (Fluid.L_n*(P_nv./P_wv) +...
+         n_gw = ((Q_p*Grid.dx*Grid.dz*Grid.dt)./ (Fluid.L_n*(P_wv./P_nv) +...
              Fluid.L_w*ones(size(Q))));                 % energy balance
          n_gn = n_gw.*P_nv./P_wv;                     % Dalton's law
          

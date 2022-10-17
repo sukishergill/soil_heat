@@ -42,7 +42,7 @@ Fluid.sigma = 0.0623;   % interfacial tension of air/water
 
 P_cdim = 0.18557;                                   % dimless cap pressure
 Fluid.P_D = P_cdim*Fluid.sigma*...
-    (Fluid.por./Fluid.k).^(0.5);                      % displacement pressure
+    (Fluid.por./Fluid.k).^(0.5);                    % displacement pressure
 
 P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
     .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
@@ -65,6 +65,7 @@ T = (10+273.15)*ones(Grid.Nz,Grid.Nx);
 
 % sink term that represents the heat comsumed by co-boiling
 Q = zeros(Grid.Nz, Grid.Nx);    
+Q_old = Q;
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
@@ -74,7 +75,8 @@ Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
 
 % heat flux due to the heaters
-f_l = -10/0.15;
+% f_l = -80/2.75;
+f_l = -10 / 0.15;
 % f_r = 10/0.15;
 % f_l = 0; 
 f_r = 0;
@@ -99,6 +101,13 @@ V_n = S_n * V_cell;
 % initial moles of water and NAPL
 n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
 n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
+
+% volume of NAPL and water vapor (initially 0 b/c there's none)
+V_gw_tot = zeros(size(T));
+V_gn_tot = zeros(size(T));
+
+n_gw_tot = zeros(size(T));
+n_gn_tot = zeros(size(T));
 
 times = [t];
 temps = [mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
@@ -133,8 +142,16 @@ Sg_vals = [];   t_Sg = [];
 
 cb = 0;
 
+co_boil = zeros(size(T));
+old_cb = zeros(size(T));
+
+cb_w_T = zeros(size(T));
+cb_n_T = zeros(size(T));
+cb_wn_T = zeros(size(T));
+
 [A, rhsvec] = compute_A(Grid, lambda,...
     heat_cap, f_l, f_r);
+
 
 % [L,U] = lu(A);
 
@@ -142,7 +159,7 @@ cb = 0;
 
 %%
 
-while t < 2592000
+while t < (2*1296000)
     
 %     if cb == 864000
 %         Grid.dt = 360;
@@ -154,7 +171,7 @@ while t < 2592000
     t = t + Grid.dt;
      
     % compute temp
-    T = temp_v3(Grid, T, Q,lambda, heat_cap,f_l, f_r);
+    T = temp_v7(Grid, T, Q,lambda, heat_cap, f_l, f_r, co_boil);
 
 % BDF2
 %     if cb == 0
@@ -183,7 +200,7 @@ while t < 2592000
     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
         ./(T - 46.29*ones(size(T)))) .* (S_w > Fluid.S_r);
    
-    
+   
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
     
 %     co_boil = co_boil + ((P_wv + P_nv) >= (P_w + Fluid.P_D));
@@ -202,10 +219,12 @@ while t < 2592000
         
         cb = 1;
         
+        
+        
 %         if co_boil(i,1) == 1
 %             cb_time = [cb_time; t];
 %             cb_temp = [cb_temp; T(i,1)];
-%             i = i+1;
+%             i = i+1; z 0.5 dz0.05 x20 dx 0.05
 %         end
 %         
          % Compute Q which is given by Q = div(lambda * grad(T))
@@ -232,40 +251,13 @@ while t < 2592000
              [-Grid.dz, z, Grid.dz + Grid.z]);
          
          T_x = T_x(2:end-1, 2:end-1);       T_z = T_z(2:end-1, 2:end-1);
-         
-         % EDIT: for the divergence and gradient of lambda below, we still
-         % need to edit the boundary since MATLAB's div and grad solver
-         % uses a one sided difference at the boundary.
-%          div_gradT = divergence(xx, zz, T_x, T_z);
-         
-         lambda1 = [lambda(:,2), lambda, lambda(:,end-1)];
-         lambda1 = [lambda1(2,:); lambda1; lambda1(end-1,:)];
-         
-         [lambda_x, lambda_z] = gradient(lambda1,[-Grid.dx, x,...
-             Grid.dx + Grid.x],[-Grid.dz, z, Grid.dz + Grid.z]);
-         
-         lambda_x = lambda_x(2:end-1, 2:end-1);
-         lambda_z = lambda_z(2:end-1, 2:end-1);
-   
-%          [lambda_x, lambda_z] = gradient(lambda,x,z);
-         
-%          gradT_gradl = T_x.*lambda_x + T_z.*lambda_z;
-         gradT_gradl = dot(cat(3,T_x,T_z),cat(3,lambda_x, lambda_z),3);
-         
-%          laplace_T = del2(T, x, z);
-
-         laplace_T = del2(T1, [-Grid.dx, x, Grid.dx + Grid.x],...
-             [-Grid.dz, z, Grid.dz + Grid.z]);
-         
-         laplace_T = laplace_T(2:end-1, 2:end-1);
        
-         Q = lambda.*laplace_T + gradT_gradl;
-         
-%          Q = lambda.*div_gradT + gradT_gradl;
-         
+         Q = divergence(x, z, lambda.*T_x, lambda.*T_z);
+                  
          % Q > 0 only in cells that reach co-boiling temperature, otherwise
          % Q = 0
          Q = Q .* co_boil;
+%          Q = abs(Q);
          
 %          Q = Q .* (Q > 0);
          Q_p = Q .* (Q > 0);
@@ -295,6 +287,9 @@ while t < 2592000
             V_gn =  V_gn .* (V_n > V_gn) + V_n .* (V_n < V_gn);
          end
          
+         V_gn_tot = V_gn_tot + V_gn;
+         n_gn_tot = n_gn_tot + V_gn.*P_g ./ (8.314462*T);
+         
          V_gw = (8.314462*(n_gw.*T) ./ P_g);       % water vapor
          
          % S_w can only be in the range [S_r, 1] so the volume of water can
@@ -303,12 +298,16 @@ while t < 2592000
             V_gw = V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
          end
          
+         V_gw_tot = V_gw_tot + V_gw;
+         n_gw_tot = n_gw_tot + V_gw.*P_g ./ (8.314462*T);
+         
          V_n = (V_n - V_gn) .* (V_n >= V_gn);
          V_w = (V_w - V_gw) .* (V_w >= V_gw);
       
          % update saturations
          S_n = V_n / V_cell;
          S_w = (V_w / V_cell) + Fluid.S_r;
+%          S_g = (V_gw_tot + V_gn_tot)/V_cell;
          S_g = S_g + (V_gw + V_gn)/V_cell;
          
          % Compute capillary and gas pressures
@@ -322,14 +321,14 @@ while t < 2592000
          
 %          % macro-IP
          if max(max(S_g)) > Fluid.S_gcr  
-             
+%              
              figure(3)
              colormap([1 1 1; 0 0 1]);
              image((S_g > Fluid.S_gcr) .* 255);
              
 %              frame =  getframe(gcf);
 %              writeVideo(v, frame);
-             
+
              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
                  co_boil, Fluid);
              
@@ -338,15 +337,15 @@ while t < 2592000
              image((S_g > Fluid.S_gcr) .* 255);
              
              
-             
-%              frame =  getframe(gcf);
-%              writeVideo(v, frame);
-             
-             % we will need to recompute the volume of water since it will
-             % move around in the cell
-             V_w = (S_w - Fluid.S_r) * V_cell;
-             
-             Sg_vals = [Sg_vals; S_g(:,1)'];   t_Sg = [t_Sg; t];
+%              
+% %              frame =  getframe(gcf);
+% %              writeVideo(v, frame);
+%              
+%              % we will need to recompute the volume of water since it will
+%              % move around in the cell
+%              V_w = (S_w - Fluid.S_r) * V_cell;
+%              
+%              Sg_vals = [Sg_vals; S_g(:,1)'];   t_Sg = [t_Sg; t];
              
          end
          
@@ -391,7 +390,7 @@ while t < 2592000
          K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
          
-         
+         Q_old = Q;
     end
 
 %     t = t + Grid.dt;

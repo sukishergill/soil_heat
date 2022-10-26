@@ -2,8 +2,8 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;     Grid.Nz = Grid.z/Grid.dz + 1;
-Grid.x = 5;     Grid.dx = 1/5;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 15;                % end time (in days)
+t_end = 40;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -187,8 +187,8 @@ while t < t_end*86400
             V_gn =  V_gn .* (V_n > V_gn) + V_n .* (V_n < V_gn);
          end
          
-%          V_gn_tot = V_gn_tot + V_gn;
-%          n_gn_tot = n_gn_tot + V_gn.*P_g ./ (8.314462*T);
+         V_gn_tot = V_gn_tot + V_gn;
+         n_gn_tot = n_gn_tot + V_gn.*P_g ./ (8.314462*T);
          
          V_gw = (8.314462*(n_gw.*T) ./ P_g);       % water vapor
          
@@ -198,8 +198,8 @@ while t < t_end*86400
             V_gw = V_gw .* (V_w > V_gw) + V_w .* (V_w < V_gw);
          end
          
-%          V_gw_tot = V_gw_tot + V_gw;
-%          n_gw_tot = n_gw_tot + V_gw.*P_g ./ (8.314462*T);
+         V_gw_tot = V_gw_tot + V_gw;
+         n_gw_tot = n_gw_tot + V_gw.*P_g ./ (8.314462*T);
          
          V_n = (V_n - V_gn) .* (V_n >= V_gn);
          V_w = (V_w - V_gw) .* (V_w >= V_gw);
@@ -218,8 +218,12 @@ while t < t_end*86400
              colormap([1 1 1; 0 0 1]);
              image((S_g > Fluid.S_gcr) .* 255);
 
-             [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
-                 co_boil, Fluid);
+%              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
+%                  co_boil, Fluid);
+
+             [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q,...
+                 T, V_gw_tot, V_gn_tot, n_gw_tot, n_gn_tot, co_boil, ...
+                 V_cell, Fluid);
              
              figure(3)
              colormap([1 1 1; 0 0 1]);

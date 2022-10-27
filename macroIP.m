@@ -1,5 +1,5 @@
-function [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T, V_gw,...
-    V_gn, n_gw, n_gn, co_boil, V_cell, Fluid)
+function [S_g, S_w, S_n, n_gn, n_gw] = macroIP(S_g, S_n, S_w,...
+    P_w, Q, T, V_gw, V_gn, n_gw, n_gn, co_boil, V_cell, Fluid)
 
 
 S_gcr = Fluid.S_gcr;
@@ -76,8 +76,5 @@ while MIP_end == 0
     
     
 end
-
-% Q = avgCluster(Q, clusters, lw, num);
-% T = avgCluster(T, clusters, lw, num);
 
 end

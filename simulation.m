@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 40;                % end time (in days)
+t_end = 30;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -64,6 +64,9 @@ Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
 
 % heat flux due to the heaters
+% f_l = -10 ./ (1000 .* lambda(:,1));
+% 
+% f_r = 0 ./ (1000 .* lambda(:,1));
 % f_l = -80/2.75;
 f_l = -10 / 0.15;
 % f_r = 10/0.15;
@@ -71,7 +74,7 @@ f_l = -10 / 0.15;
 f_r = 0;
 
 % initial K_e
-K_e = (kappa*(ones(size(S_g)) - S_g))./(1 + (kappa - 1)*(1 - S_g));   
+K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));
 
 % initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
@@ -101,6 +104,16 @@ n_gn_tot = zeros(size(T));
 
 co_boil = zeros(size(T));
 
+co_boil_w = zeros(size(T));
+co_boil_n = zeros(size(T));
+co_boil_nw = zeros(size(T));
+
+T_cb_w = zeros(size(T));
+T_cb_n = zeros(size(T));
+T_cb_nw = zeros(size(T));
+
+T_cb = zeros(size(T));
+
 times = [t];
 temps = [mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
 
@@ -110,19 +123,25 @@ Tdata = [T(1,1)];
 
 % define left and right extractors (this is subject to change as cells
 % dry out)
-extractors = cell(2, 1);
+% extractors = cell(2, 1);
+% 
+% for i = 1:Grid.Nz
+%    % left side
+%    extractors{1, 1} =  [extractors{1, 1}; [i, 1]];
+%     
+%    % right side
+%    extractors{2, 1} = [extractors{2, 1}; [i, Grid.Nx]]; 
+% end
 
-for i = 1:Grid.Nz
-   % left side
-   extractors{1, 1} =  [extractors{1, 1}; [i, 1]];
-    
-   % right side
-   extractors{2, 1} = [extractors{2, 1}; [i, Grid.Nx]]; 
-end
+extractors = zeros(size(T));
+extractors(:,1) = 1;    extractors(:,end) = 1;
     
 Sg_vals = [];   t_Sg = [];
 
 cb = 0;
+
+recovered_NAPL = 0;
+recovered_water = 0;
 
 %%
 
@@ -131,7 +150,9 @@ while t < t_end*86400
     t = t + Grid.dt;
      
     % compute temp
-    T = temp_v7(Grid, T, Q,lambda, heat_cap, f_l, f_r, co_boil);
+    T = temp_v7(Grid, T, Q, lambda, heat_cap, f_l, f_r, co_boil);
+    
+%     T = T_cb.*co_boil + T .* (co_boil == 0);
     
     Tdata = [Tdata; T(1,1)];
     
@@ -143,6 +164,24 @@ while t < t_end*86400
    
    
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
+    
+    co_boil_w = (co_boil_w + co_boil).*(P_nv == 0).*(P_wv ~= 0);
+    T_cb_w = (T_cb_w + T .* (co_boil_w == 1)).*(P_nv == 0).*(P_wv ~= 0);
+    
+    co_boil_w = co_boil_w > 0;
+    
+    co_boil_nw = (co_boil_nw + co_boil).*(P_nv ~= 0).*(P_wv ~= 0);
+    T_cb_nw = (T_cb_nw + T .* (co_boil_nw == 1)).*(P_nv ~= 0).*(P_wv ~= 0);
+    
+    co_boil_nw = co_boil_nw > 0;
+    
+    co_boil_n = (co_boil_n + co_boil).*(P_wv == 0).*(P_nv ~= 0);
+    T_cb_n = (T_cb_n + T .* (co_boil_n == 1)).*(P_wv == 0).*(P_nv ~= 0);
+    
+    co_boil_n = co_boil_n > 0;
+    
+    co_boil = (co_boil_w + co_boil_n + co_boil_nw) > 0;
+    T_cb = T_cb_w + T_cb_n + T_cb_nw;
         
     % check if T reaches co-boiling temp
     if any(co_boil, 'all') == 1
@@ -179,9 +218,15 @@ while t < t_end*86400
          % Compute capillary and gas pressures
          P_c = computePressure(P_w, S_w, S_n, Fluid);   % capillary pressure
          P_g =  P_c + P_w;     % gas pressure
+         
+         % when S_w = S_r, P_c = inf so it results in P_g = inf. But since
+         % S_w = S_r means there's no liquid in the cell, no gas can be
+         % produced so we can set P_g = 0 instead
+         P_g(isinf(P_g)) = 0;
 
          % compute volume of gas using the ideal gas law
          V_gn = (8.314462*(n_gn.*T) ./ P_g);       % NAPL vapor
+         V_gn(isnan(V_gn)) = 0;         % NaN value results from P_g = 0;
          
          if min(min(V_n - V_gn)) < 0
             V_gn =  V_gn .* (V_n > V_gn) + V_n .* (V_n < V_gn);
@@ -191,6 +236,7 @@ while t < t_end*86400
          n_gn_tot = n_gn_tot + V_gn.*P_g ./ (8.314462*T);
          
          V_gw = (8.314462*(n_gw.*T) ./ P_g);       % water vapor
+         V_gw(isnan(V_gw)) = 0;
          
          % S_w can only be in the range [S_r, 1] so the volume of water can
          % only be within the range for those S_w values
@@ -212,22 +258,19 @@ while t < t_end*86400
          
          
          % macro-IP
-         if max(max(S_g)) > Fluid.S_gcr  
+         if max(max(S_g)) >= Fluid.S_gcr  
              
              figure(3)
              colormap([1 1 1; 0 0 1]);
-             image((S_g > Fluid.S_gcr) .* 255);
+             image((S_g >= Fluid.S_gcr) .* 255);
 
-%              [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q, T,...
-%                  co_boil, Fluid);
-
-             [S_g, S_w, S_n, Q, T] = macroIP(S_g, S_n, S_w, P_w, Q,...
-                 T, V_gw_tot, V_gn_tot, n_gw_tot, n_gn_tot, co_boil, ...
-                 V_cell, Fluid);
+             [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, S_w,...
+                 P_w, Q, T, V_gw_tot, V_gn_tot, n_gw_tot, n_gn_tot, ...
+                 co_boil, V_cell, Fluid);
              
              figure(3)
              colormap([1 1 1; 0 0 1]);
-             image((S_g > Fluid.S_gcr) .* 255);
+             image((S_g >= Fluid.S_gcr) .* 255);
              
              
              % we will need to recompute the volume of water since it will
@@ -238,29 +281,57 @@ while t < t_end*86400
              
          end
          
-         % INCOMPLETE
-         % Remove NAPL and water vapor from system
-         % Since gas gets moved around in MIP it's hard to keep track of
-         % the volume of NAPL and water vapor separately. But one way is to
-         % keep track of how much liquid water and NAPL is still left in
-         % the system. 
          
          % check for dried out regions adjacent to extractors
-         for i = 1:Grid.Nz
-           
-             % left extractor
-             if S_w(extractors{1,1}(i,1), extractors{1,1}(i,2) + 1)...
-                     <= Fluid.S_r
+         [ext_clust, ext_lw, ext_num] = findClusters(extractors == 1);
+         
+         for i = 1:ext_num
+             for j = 1:size(ext_clust{i,1}, 1)
                  
-                 extractors{1,1}(i,2) = extractors{1,1}(i,2) + 1;
+                 if ext_clust{i,1}(j,2) ~= Grid.Nx
+                
+                     if S_w(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2) + 1)...
+                             <= Fluid.S_r
+
+                         extractors(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)...
+                             + 1) = 1;
+                     end
+                 end
                  
+                 if ext_clust{i,1}(j,2) ~= 1
+                     
+                     if S_w(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2) - 1)...
+                             <= Fluid.S_r
+
+                         extractors(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)...
+                             + 1) = 1;
+                     end
+                 end
+                     
              end
-             
-             % right extractor
-             if S_w(extractors{2,1}(i,1), extractors{2,1}(i,2) - 1)...
-                     <= Fluid.S_r
+         end
+                  
+         % remove NAPL and water vapor from the system
+         [cluster, lw, num] = findClusters(S_g >= Fluid.S_gcr);
+         
+         for i = 1:num
+            
+             if any(((lw == i) .* extractors) >= 1, 'all') == 1
                  
-                 extractors{2,1}(i,2) = extractors{2,1}(i,2) - 1;
+                 recovered_NAPL =  recovered_NAPL + ...
+                     sum(sum(n_gn_tot.*(lw == i)));
+                 
+                 n_gn_tot((n_gn_tot.*(lw == i)) ~= 0) = 0;
+                 V_gn_tot((V_gn_tot.*(lw == i)) ~= 0) = 0;
+                 
+                 
+                 recovered_water =  recovered_water + ...
+                     sum(sum(n_gw_tot.*(lw == i)));
+                 
+                 n_gw_tot((n_gw_tot.*(lw == i)) ~= 0) = 0;
+                 V_gw_tot((V_gw_tot.*(lw == i)) ~= 0) = 0;
+                 
+                 S_g((S_g.*(lw == i)) ~= 0) = 0;
                  
              end
              
@@ -276,7 +347,7 @@ while t < t_end*86400
              (1-Fluid.por)*Fluid.rho_s*Fluid.C_ps;
 
          % update thermal conductivity
-         K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
+         K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
          
          Q_old = Q;

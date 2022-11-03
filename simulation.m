@@ -216,7 +216,7 @@ while t < t_end*86400
          n_gn(isnan(n_gn)) = 0;         n_gw(isnan(n_gw)) = 0;
          
          % Compute capillary and gas pressures
-         P_c = computePressure(P_w, S_w, S_n, Fluid);   % capillary pressure
+         P_c = compute_Pc(P_w, S_w, S_n, Fluid);   % capillary pressure
          P_g =  P_c + P_w;     % gas pressure
          
          % when S_w = S_r, P_c = inf so it results in P_g = inf. But since

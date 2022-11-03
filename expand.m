@@ -3,6 +3,8 @@ function [MIP_cells, S_g, S_w] = expand(S_g, S_n, S_w, P_g, T_e,...
 
 Nx = size(S_g, 2);          Nz = size(S_g, 1);
 
+S_w = S_w;
+
 for i = 1:size(clusters,1)
     
     for j = 1:size(clusters{i,1}, 1)
@@ -23,9 +25,9 @@ for i = 1:size(clusters,1)
                       clusters{i,1}(j,1)-1, clusters{i,1}(j,2)];
                   
                   S_g(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) = S_gcr;
-                  S_w(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) = 1 - ...
-                      (S_g(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) + ...
-                      S_n(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)));
+%                   S_w(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) = 1 - ...
+%                       (S_g(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) + ...
+%                       S_n(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)));
                   MIP_cells(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) = 1;
 %                   non_MIP(clusters{i,1}(j,1)-1, clusters{i,1}(j,2)) = 0;
 
@@ -112,5 +114,6 @@ for i = 1:size(clusters,1)
     end
 end
 
+% S_w = 1 - (S_g + S_n);
 
 end

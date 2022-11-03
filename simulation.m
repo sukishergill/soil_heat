@@ -2,7 +2,7 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.z = 5;     Grid.dz = 1/5;      Grid.Nz = Grid.z/Grid.dz + 1;
 Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
@@ -253,24 +253,23 @@ while t < t_end*86400
          % update saturations
          S_n = V_n / V_cell;
          S_w = (V_w / V_cell) + Fluid.S_r;
-%          S_g = (V_gw_tot + V_gn_tot)/V_cell;
          S_g = S_g + (V_gw + V_gn)/V_cell;
+%          S_g = 1 - (S_w + S_n);
          
          
          % macro-IP
          if max(max(S_g)) >= Fluid.S_gcr  
              
-             figure(3)
-             colormap([1 1 1; 0 0 1]);
-             image((S_g >= Fluid.S_gcr) .* 255);
+%              figure(3)
+%              colormap([1 1 1; 0 0 1]);
+%              image((S_g >= Fluid.S_gcr) .* 255);
 
-             [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, S_w,...
-                 P_w, Q, T, V_gw_tot, V_gn_tot, n_gw_tot, n_gn_tot, ...
-                 co_boil, V_cell, Fluid);
+             [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
+                 S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid);
              
-             figure(3)
-             colormap([1 1 1; 0 0 1]);
-             image((S_g >= Fluid.S_gcr) .* 255);
+%              figure(3)
+%              colormap([1 1 1; 0 0 1]);
+%              image((S_g >= Fluid.S_gcr) .* 255);
              
              
              % we will need to recompute the volume of water since it will
@@ -295,6 +294,14 @@ while t < t_end*86400
 
                          extractors(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)...
                              + 1) = 1;
+                         
+                         recovered_NAPL = recovered_NAPL + ...
+                             n_gn_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
+                         
+                         recovered_water = recovered_water + ...
+                             n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
+                         
+                         S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
                      end
                  end
                  
@@ -304,7 +311,16 @@ while t < t_end*86400
                              <= Fluid.S_r
 
                          extractors(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)...
-                             + 1) = 1;
+                             - 1) = 1;
+                         
+                         recovered_NAPL = recovered_NAPL + ...
+                             n_gn_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
+                         
+                         recovered_water = recovered_water + ...
+                             n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
+                         
+                         S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
+                         
                      end
                  end
                      
@@ -347,7 +363,7 @@ while t < t_end*86400
              (1-Fluid.por)*Fluid.rho_s*Fluid.C_ps;
 
          % update thermal conductivity
-         K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));    
+         K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
          
          Q_old = Q;

@@ -2,7 +2,7 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 1/5;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
 Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 30;                % end time (in days)
+t_end = 15;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -51,26 +51,20 @@ V_cell = Fluid.por * Grid.dx * Grid.dz;             % volume of cell
 
 % initial values
 % initial temperature (Kelvin)
-T = (10+273.15)*ones(Grid.Nz,Grid.Nx);     
+T = (10+273.15)*ones(Grid.Nz,Grid.Nx);    
 
 % sink term that represents the heat comsumed by co-boiling
 Q = zeros(Grid.Nz, Grid.Nx);    
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
-S_n = 0.01*ones(Grid.Nz,Grid.Nx);       % initial water saturation
-S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
+S_n = 0.01*ones(Grid.Nz, Grid.Nx);      % initial NAPL saturation
+S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial water saturation
 Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
 
 % heat flux due to the heaters
-% f_l = -10 ./ (1000 .* lambda(:,1));
-% 
-% f_r = 0 ./ (1000 .* lambda(:,1));
-% f_l = -80/2.75;
-f_l = -10 / 0.15;
-% f_r = 10/0.15;
-% f_l = 0; 
+f_l = (-10/0.15)*ones(size(T(:,1)));
 f_r = 0;
 
 % initial K_e
@@ -78,6 +72,8 @@ K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));
 
 % initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
+
+% f_l = -10./(Grid.Nx.*lambda(:,1));
 
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -91,8 +87,8 @@ V_n = S_n * V_cell;
 % molar mass of water: 18.01528 g/mol
 % molar mass of 1,1,1-Trichloroethane: 133.4 g/mol
 % initial moles of water and NAPL
-n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
-n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
+n_w = (Fluid.rho_w/1000000)*V_w / 18.01528;     % moles of water
+n_n = (Fluid.rho_n/1000000)*V_n / 131.4;      % moles of NAPL
 
 % volume of NAPL and water vapor (initially 0 b/c there's initially no gas
 % in the domain)
@@ -121,18 +117,6 @@ old_T = T;
 
 Tdata = [T(1,1)];
 
-% define left and right extractors (this is subject to change as cells
-% dry out)
-% extractors = cell(2, 1);
-% 
-% for i = 1:Grid.Nz
-%    % left side
-%    extractors{1, 1} =  [extractors{1, 1}; [i, 1]];
-%     
-%    % right side
-%    extractors{2, 1} = [extractors{2, 1}; [i, Grid.Nx]]; 
-% end
-
 extractors = zeros(size(T));
 extractors(:,1) = 1;    extractors(:,end) = 1;
     
@@ -142,6 +126,27 @@ cb = 0;
 
 recovered_NAPL = 0;
 recovered_water = 0;
+
+T_x_0 = 0;
+
+T_cb_ss = zeros(1, Grid.Nx);
+t_cb_vals = [];
+x_cb_vals = [];
+Sn_initial_cb = S_n(1,:);
+
+size_cb = 0;
+
+Sn_vapor = zeros(1, Grid.Nx);
+
+t_vals = [];   
+x_vals = [];
+T_vals = [];
+
+T_profiles = [];
+time_profiles = [];
+
+lambda_profiles = [];
+
 
 %%
 
@@ -165,30 +170,31 @@ while t < t_end*86400
    
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
     
-    co_boil_w = (co_boil_w + co_boil).*(P_nv == 0).*(P_wv ~= 0);
-    T_cb_w = (T_cb_w + T .* (co_boil_w == 1)).*(P_nv == 0).*(P_wv ~= 0);
+    co_boil_w = (co_boil_w + co_boil).*(S_n == 0).*(S_w > Fluid.S_r);
+    T_cb_w = (T_cb_w + T .* (co_boil_w == 1)).*(S_n == 0).*(S_w >= Fluid.S_r);
     
     co_boil_w = co_boil_w > 0;
     
-    co_boil_nw = (co_boil_nw + co_boil).*(P_nv ~= 0).*(P_wv ~= 0);
-    T_cb_nw = (T_cb_nw + T .* (co_boil_nw == 1)).*(P_nv ~= 0).*(P_wv ~= 0);
+    co_boil_nw = (co_boil_nw + co_boil).*(S_n ~= 0).*(S_w > Fluid.S_r);
+    T_cb_nw = (T_cb_nw + T .* (co_boil_nw == 1)).*(S_n ~= 0).*(S_w >= Fluid.S_r);
     
     co_boil_nw = co_boil_nw > 0;
     
-    co_boil_n = (co_boil_n + co_boil).*(P_wv == 0).*(P_nv ~= 0);
-    T_cb_n = (T_cb_n + T .* (co_boil_n == 1)).*(P_wv == 0).*(P_nv ~= 0);
+    co_boil_n = (co_boil_n + co_boil).*(S_w <= Fluid.S_r).*(S_n ~= 0);
+    T_cb_n = (T_cb_n + T .* (co_boil_n == 1)).*(S_w <= Fluid.S_r).*(S_n ~= 0);
     
     co_boil_n = co_boil_n > 0;
     
     co_boil = (co_boil_w + co_boil_n + co_boil_nw) > 0;
-    T_cb = T_cb_w + T_cb_n + T_cb_nw;
-        
+    T_cb = T_cb_w + T_cb_n + T_cb_nw;       
+
     % check if T reaches co-boiling temp
     if any(co_boil, 'all') == 1
         
+        
          % Compute Q which is given by Q = div(lambda * grad(T))
          
-         Q = compute_Q(T, f_l, f_r, lambda, Grid);
+         Q = compute_Q(T, -10/0.15, f_r, lambda, Grid);
          
                   
          % Q > 0 only in cells that reach co-boiling temperature, otherwise
@@ -208,8 +214,10 @@ while t < t_end*86400
              .* (P_nv == 0);  
          
          % Dalton's law
-         n_gn = (n_gw.*P_nv./P_wv) .* (P_wv ~= 0) + ...
-             ((Q_p*Grid.dx*Grid.dz*Grid.dt) ./ (Fluid.L_n*ones(size(Q))))...
+         n_gn = (n_gw.*P_nv./P_wv) .* (P_wv ~= 0);
+             
+         n_gn(isnan(n_gn)) = 0;
+         n_gn = n_gn + ((Q_p*Grid.dx*Grid.dz*Grid.dt) ./ (Fluid.L_n*ones(size(Q))))...
              .* (P_wv == 0);                     
          
          n_gn = n_gn .* co_boil;        n_gw = n_gw .* co_boil;
@@ -254,8 +262,6 @@ while t < t_end*86400
          S_n = V_n / V_cell;
          S_w = (V_w / V_cell) + Fluid.S_r;
          S_g = S_g + (V_gw + V_gn)/V_cell;
-%          S_g = 1 - (S_w + S_n);
-         
          
          % macro-IP
          if max(max(S_g)) >= Fluid.S_gcr  
@@ -301,7 +307,6 @@ while t < t_end*86400
                          recovered_water = recovered_water + ...
                              n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
                          
-                         S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
                      end
                  end
                  
@@ -318,9 +323,7 @@ while t < t_end*86400
                          
                          recovered_water = recovered_water + ...
                              n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
-                         
-                         S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
-                         
+                                                  
                      end
                  end
                      
@@ -346,16 +349,14 @@ while t < t_end*86400
                  
                  n_gw_tot((n_gw_tot.*(lw == i)) ~= 0) = 0;
                  V_gw_tot((V_gw_tot.*(lw == i)) ~= 0) = 0;
-                 
-                 S_g((S_g.*(lw == i)) ~= 0) = 0;
-                 
+                                  
              end
              
          end
          
          % update moles of water and NAPL
-         n_w = Fluid.rho_w*V_w / 18.01528;     % moles of water
-         n_n = Fluid.rho_n*V_n / 131.4;      % moles of NAPL
+         n_w = (Fluid.rho_w/1000000)*V_w / 18.01528;     % moles of water
+         n_n = (Fluid.rho_n/1000000)*V_n / 131.4;      % moles of NAPL
               
          % update heat capacity
          heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -365,6 +366,9 @@ while t < t_end*86400
          % update thermal conductivity
          K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
+        
+         
+%          f_l = -10./(Grid.Nx.*lambda(:,1));
          
          Q_old = Q;
     end

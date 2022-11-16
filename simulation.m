@@ -100,8 +100,8 @@ V_n = S_n * V_cell;
 % molar mass of water: 18.01528 g/mol
 % molar mass of 1,1,1-Trichloroethane: 133.4 g/mol
 % initial moles of water and NAPL
-n_w = (Fluid.rho_w/1000000)*V_w / 18.01528;     % moles of water
-n_n = (Fluid.rho_n/1000000)*V_n / 131.4;      % moles of NAPL
+n_w = (Fluid.rho_w)*V_w / 18.01528;     % moles of water
+n_n = (Fluid.rho_n)*V_n / 131.4;      % moles of NAPL
 
 % volume of NAPL and water vapor (initially 0 b/c there's initially no gas
 % in the domain)

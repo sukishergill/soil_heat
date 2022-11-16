@@ -1,5 +1,5 @@
 function [MIP_cells, S_g, S_w ,P_g] =  mobilize(S_g, S_n, S_w, T, T_e,...
-    T_t, P_g ,co_boil, clusters, MIP_cells, S_gcr, lw, num)
+    T_t, P_g ,co_boil, clusters, MIP_cells, S_gcr, lw, num, extractors)
 
 Nx = size(S_g, 2);          Nz = size(S_g, 1);
 S_w = S_w;
@@ -23,8 +23,9 @@ for i = 1:num
                     (co_boil(clust_bound(l,1), clust_bound(l,2)) == 1)
 
                 % condition for mobilization/fragmentation
-                if T_t(clusters{i,1}(j,1), clusters{i,1}(j,2)) > ...
-                        T_e(clust_bound(l,1), clust_bound(l,2))
+                if (T_t(clusters{i,1}(j,1), clusters{i,1}(j,2)) > ...
+                        T_e(clust_bound(l,1), clust_bound(l,2))) && ...
+                        (extractors(clust_bound(l,1), clust_bound(l,2)) == 0)
 
                     % move gas from imbibed cell to newly gas saturated cell
                     S_g(clust_bound(l,1), clust_bound(l,2)) = ...
@@ -48,19 +49,16 @@ for i = 1:num
 
                     % Adjust the water saturation so that the equilibrium
                     % law is still satisfied
-%                     S_w(clust_bound(l,1), clust_bound(l,2)) = ...
-%                         1 - (S_g(clust_bound(l,1), clust_bound(l,2))...
-%                         + S_n(clust_bound(l,1), clust_bound(l,2)));
-% 
-%                     S_w(clusters{i,1}(j,1), clusters{i,1}(j,2)) = 1 - ...
-%                         (S_g(clusters{i,1}(j,1), clusters{i,1}(j,2)) + ...
-%                         S_n(clusters{i,1}(j,1), clusters{i,1}(j,2)));
+                    S_w(clust_bound(l,1), clust_bound(l,2)) = ...
+                        1 - (S_g(clust_bound(l,1), clust_bound(l,2))...
+                        + S_n(clust_bound(l,1), clust_bound(l,2)));
+
+                    S_w(clusters{i,1}(j,1), clusters{i,1}(j,2)) = 1 - ...
+                        (S_g(clusters{i,1}(j,1), clusters{i,1}(j,2)) + ...
+                        S_n(clusters{i,1}(j,1), clusters{i,1}(j,2)));
 
                     MIP_cells(clust_bound(l,1), clust_bound(l,2)) = 1;
-    %                 non_MIP(clust_bound(l,1), clust_bound(l,2)) = 0;
-
                     MIP_cells(clusters{i,1}(j,1), clusters{i,1}(j,2)) = 0;
-    %                 non_MIP(clusters{i,1}(j,1), clusters{i,1}(j,2)) = 1;
 
                     % "replace" the cell that used to be gas occupied
                     clusters{i,1}(j,:) = clust_bound(l,:);

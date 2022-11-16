@@ -2,8 +2,8 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
-Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 0.2;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.x = 12;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 15;                % end time (in days)
+t_end = 3000;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -47,6 +47,11 @@ Fluid.P_D = P_cdim*Fluid.sigma*...
 P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
     .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
 
+% P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx))...
+%     + 1.01*10^5*ones(Grid.Nz,Grid.Nx); 
+
+% P_w = 1.01*10^5*ones(Grid.Nz, Grid.Nx);
+
 V_cell = Fluid.por * Grid.dx * Grid.dz;             % volume of cell
 
 % initial values
@@ -58,13 +63,20 @@ Q = zeros(Grid.Nz, Grid.Nx);
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
-S_n = 0.01*ones(Grid.Nz, Grid.Nx);      % initial NAPL saturation
-S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial water saturation
+S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
+S_n(:, 1:41) = 0.5;      S_n(:,42:81) = 0.87;     S_n(:,82:end) = 0.01;
+% S_n(:, 1:11) = 0.5;      S_n(:,12:21) = 0.87;     S_n(:,22:end) = 0.01;
+% S_n = 0.01*ones(Grid.Nz, Grid.Nx);
+S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
 Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
 
 % heat flux due to the heaters
+% f_r = 0 ./ (1000 .* lambda(:,1));
+% f_l = -80/2.75;
 f_l = (-10/0.15)*ones(size(T(:,1)));
+% f_r = 10/0.15;
+% f_l = 0; 
 f_r = 0;
 
 % initial K_e
@@ -142,6 +154,12 @@ t_vals = [];
 x_vals = [];
 T_vals = [];
 
+Sw_vapor = zeros(1, Grid.Nx);
+
+tw_vals = [];   
+xw_vals = [];
+Tw_vals = [];
+
 T_profiles = [];
 time_profiles = [];
 
@@ -169,6 +187,25 @@ while t < t_end*86400
    
    
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
+    
+    T_cb_ss = T_cb_ss + co_boil(1,:);
+        
+    if T_cb_ss(1,1) == 1 && S_n(1,1) == Sn_initial_cb(1,1)
+        x_cb_vals = [x_vals; 0];
+    end
+
+    x_cb_vals = [x_cb_vals; nonzeros((T_cb_ss == 1).*xx(1,:).*...
+        (Sn_initial_cb == S_n(1,:)))];
+    t_cb_vals = [t_cb_vals; nonzeros(t * (T_cb_ss == 1).*...
+        (Sn_initial_cb == S_n(1,:)))];
+    
+    if size(x_cb_vals, 1) ~= size_cb
+        T_profiles = [T_profiles; T(1,:)];
+        lambda_profiles = [lambda_profiles; lambda(1,:)];
+        time_profiles = [time_profiles; t];
+        
+        size_cb = size(x_cb_vals, 1);
+    end
     
     co_boil_w = (co_boil_w + co_boil).*(S_n == 0).*(S_w > Fluid.S_r);
     T_cb_w = (T_cb_w + T .* (co_boil_w == 1)).*(S_n == 0).*(S_w >= Fluid.S_r);
@@ -262,6 +299,28 @@ while t < t_end*86400
          S_n = V_n / V_cell;
          S_w = (V_w / V_cell) + Fluid.S_r;
          S_g = S_g + (V_gw + V_gn)/V_cell;
+%          S_g = 1 - (S_w + S_n);
+
+        Sn_vapor = Sn_vapor + (S_n(1,:) == 0);
+        if S_n(1,1) == 0 && Sn_vapor(1,1) == 1
+            x_vals = [x_vals; 0];
+        end
+        x_vals = [x_vals; nonzeros((Sn_vapor == 1).*xx(1,:))];
+        T_vals = [T_vals; nonzeros((Sn_vapor == 1).*T(1,:))];
+        t_vals = [t_vals; nonzeros(t * (Sn_vapor == 1))];
+        
+        if any(S_n(1,:) ~= 0, 'all') == 0
+            break
+        end
+        
+        Sw_vapor = Sw_vapor + (S_w(1,:) <= 0.13);
+        if S_w(1,1) <= 0.13 && Sw_vapor(1,1) == 1
+            xw_vals = [x_vals; 0];
+        end
+        xw_vals = [xw_vals; nonzeros((Sw_vapor == 1).*xx(1,:))];
+        Tw_vals = [Tw_vals; nonzeros((Sw_vapor == 1).*T(1,:))];
+        tw_vals = [tw_vals; nonzeros(t * (Sw_vapor == 1))];
+         
          
          % macro-IP
          if max(max(S_g)) >= Fluid.S_gcr  
@@ -271,7 +330,8 @@ while t < t_end*86400
 %              image((S_g >= Fluid.S_gcr) .* 255);
 
              [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
-                 S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid);
+                 S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid,...
+                 extractors);
              
 %              figure(3)
 %              colormap([1 1 1; 0 0 1]);
@@ -307,6 +367,7 @@ while t < t_end*86400
                          recovered_water = recovered_water + ...
                              n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
                          
+%                          S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
                      end
                  end
                  
@@ -323,7 +384,9 @@ while t < t_end*86400
                          
                          recovered_water = recovered_water + ...
                              n_gw_tot(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2));
-                                                  
+                         
+%                          S_g(ext_clust{i,1}(j,1), ext_clust{i,1}(j,2)) = 0;
+                         
                      end
                  end
                      
@@ -349,7 +412,9 @@ while t < t_end*86400
                  
                  n_gw_tot((n_gw_tot.*(lw == i)) ~= 0) = 0;
                  V_gw_tot((V_gw_tot.*(lw == i)) ~= 0) = 0;
-                                  
+                 
+%                  S_g((S_g.*(lw == i)) ~= 0) = 0;
+                 
              end
              
          end

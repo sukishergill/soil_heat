@@ -1,5 +1,5 @@
-function [S_g, S_w, S_n, n_gn, n_gw] = macroIP_v8(S_g, S_n, S_w,...
-    P_w, T, n_gw, n_gn, co_boil, V_cell, Fluid)
+function [S_g, S_w, S_n, n_gn, n_gw] = macroIP(S_g, S_n, S_w,...
+    P_w, T, n_gw, n_gn, co_boil, V_cell, Fluid, extractors)
 
 S_gcr = Fluid.S_gcr;
 
@@ -43,7 +43,7 @@ while MIP_end == 0
     
     % expansion
     [MIP_cells, S_g, S_w] = expand(S_g, S_n, S_w, P_g, T_e, co_boil,...
-        clusters, MIP_cells, S_gcr);
+        clusters, MIP_cells, S_gcr, extractors);
     [clusters, lw, num] = findClusters(MIP_cells);
 
     V_open = V_cell*(1 - (S_w + S_n));
@@ -65,7 +65,7 @@ while MIP_end == 0
     
     % mobilization
     [MIP_cells, S_g, S_w] = mobilize(S_g, S_n, S_w, T, T_e,...
-        T_t, P_g ,co_boil, clusters, MIP_cells, S_gcr, lw, num);
+        T_t, P_g ,co_boil, clusters, MIP_cells, S_gcr, lw, num, extractors);
     [clusters, lw, num] = findClusters(MIP_cells);
 
     V_open = V_cell*(1 - S_w - S_n);

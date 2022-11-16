@@ -2,8 +2,8 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 0.2;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
-Grid.x = 12;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
+Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
 z = linspace(0, Grid.z, Grid.Nz);
@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 3000;                % end time (in days)
+t_end = 15;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -20,19 +20,19 @@ Fluid.k = 1.03151e-12;        % permeability
 % ln(k) has mean -27.6 and variance 2 (moderate heterogeneity)
 % Fluid.k = exp(-27.6 + sqrt(2)*randn(Grid.Nz, Grid.Nx));
 
-Fluid.C_pw = 4.184/1000;           % heat capacity of water
-Fluid.C_pn = 0.958/1000;           % heat capacity of TCE
-Fluid.C_ps = 0.8/1000;             % heat capacity of soil
+Fluid.C_pw = 4.184;           % heat capacity of water
+Fluid.C_pn = 0.958;           % heat capacity of TCE
+Fluid.C_ps = 0.8;             % heat capacity of soil
 
 Fluid.rho_w = 1000000*1;              % density of water
 Fluid.rho_n = 1000000*1.46;           % density of TCE
 Fluid.rho_s = 1000000*2.7;            % grain density
 
-Fluid.L_w = 41.47;            % latent heat of vaporization of water
-Fluid.L_n = 31.24;            % latent heat of vaporization of TCE
+Fluid.L_w = 1000*41.47;            % latent heat of vaporization of water
+Fluid.L_n = 1000*31.24;            % latent heat of vaporization of TCE
 
-lambda_sat = 2.75/1000;      % thermal conductivity of saturated soil
-lambda_dry = 0.15/1000;      % thermal conductivity of dry soil
+lambda_sat = 2.75;      % thermal conductivity of saturated soil
+lambda_dry = 0.15;      % thermal conductivity of dry soil
 
 kappa = 1.9;            % soil texture dependent parameter
 
@@ -63,10 +63,10 @@ Q = zeros(Grid.Nz, Grid.Nx);
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
-S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
-S_n(:, 1:41) = 0.5;      S_n(:,42:81) = 0.87;     S_n(:,82:end) = 0.01;
+% S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
+% S_n(:, 1:41) = 0.5;      S_n(:,42:81) = 0.87;     S_n(:,82:end) = 0.01;
 % S_n(:, 1:11) = 0.5;      S_n(:,12:21) = 0.87;     S_n(:,22:end) = 0.01;
-% S_n = 0.01*ones(Grid.Nz, Grid.Nx);
+S_n = 0.01*ones(Grid.Nz, Grid.Nx);
 S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
 Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
@@ -74,7 +74,8 @@ Fluid.S_gcr = 0.15;                           % critical gas saturation
 % heat flux due to the heaters
 % f_r = 0 ./ (1000 .* lambda(:,1));
 % f_l = -80/2.75;
-f_l = (-10/0.15)*ones(size(T(:,1)));
+% f_l = (-10/0.15)*ones(size(T(:,1)));
+% f_l = -20/(2*lambda(:,1))
 % f_r = 10/0.15;
 % f_l = 0; 
 f_r = 0;
@@ -86,7 +87,7 @@ K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
 
 % f_l = -10./(Grid.Nx.*lambda(:,1));
-
+f_l = -20./(2*lambda(:,1));
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
     S_n*Fluid.por*Fluid.rho_n*Fluid.C_pn + ...

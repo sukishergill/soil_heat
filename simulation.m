@@ -2,7 +2,7 @@ clear variables;
 % Numerical simulation as described in Mumford (2020)
 
 % domain
-Grid.z = 5;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
+Grid.z = 0.2;     Grid.dz = 0.05;      Grid.Nz = Grid.z/Grid.dz + 1;
 Grid.x = 5;     Grid.dx = 0.1;       Grid.Nx = Grid.x/Grid.dx + 1;
 
 x = linspace(0, Grid.x, Grid.Nx);
@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 15;                % end time (in days)
+t_end = 200;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -44,19 +44,19 @@ P_cdim = 0.18557;                                   % dimless cap pressure
 Fluid.P_D = P_cdim*Fluid.sigma*...
     (Fluid.por./Fluid.k).^(0.5);                    % displacement pressure
 
-P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
-    .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
+% P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx)...
+%     .*z') + 1.01*10^5*ones(Grid.Nz,Grid.Nx);          % water pressure
 
 % P_w = 9.8*(Fluid.rho_w/1000)*(ones(Grid.Nz,Grid.Nx))...
 %     + 1.01*10^5*ones(Grid.Nz,Grid.Nx); 
 
-% P_w = 1.01*10^5*ones(Grid.Nz, Grid.Nx);
+P_w = 1.01*10^5*ones(Grid.Nz, Grid.Nx);
 
 V_cell = Fluid.por * Grid.dx * Grid.dz;             % volume of cell
 
 % initial values
 % initial temperature (Kelvin)
-T = (10+273.15)*ones(Grid.Nz,Grid.Nx);    
+T = (10+0)*ones(Grid.Nz,Grid.Nx);    
 
 % sink term that represents the heat comsumed by co-boiling
 Q = zeros(Grid.Nz, Grid.Nx);    
@@ -86,8 +86,8 @@ K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));
 % initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
 
-% f_l = -10./(Grid.Nx.*lambda(:,1));
-f_l = -20./(2*lambda(:,1));
+f_l = -400./(2*lambda(:,1));
+
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
     S_n*Fluid.por*Fluid.rho_n*Fluid.C_pn + ...
@@ -124,7 +124,7 @@ T_cb_nw = zeros(size(T));
 T_cb = zeros(size(T));
 
 times = [t];
-temps = [mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
+temps = [mean(mean(T - 0*ones(Grid.Nz,Grid.Nx)))];
 
 old_T = T;
 
@@ -181,10 +181,15 @@ while t < t_end*86400
     Tdata = [Tdata; T(1,1)];
     
     % compute vapor pressure using Antoine eqn
-    P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
-        ./(T - 83.445*ones(size(T)))) .* (S_n ~= 0);
-    P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
-        ./(T - 46.29*ones(size(T)))) .* (S_w > Fluid.S_r);
+%     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
+%         ./((T+273.15) - 83.445*ones(size(T)))) .* (S_n ~= 0);
+%     P_wv = exp(23.195*ones(size(T)) - 3814*ones(size(T))...
+%         ./((T+273.15) - 46.29*ones(size(T)))) .* (S_w > Fluid.S_r);
+
+    P_nv = 133.322 * (10.^(6.87981*ones(size(T)) - (1157.83*ones(size(T))...
+        ./(T + 202.58*ones(size(T)))))) .* (S_n ~= 0);
+    P_wv = 133.322 * (10.^(7.9492*ones(size(T)) - (1657.46*ones(size(T))...
+        ./(T + 227.02*ones(size(T)))))) .* (S_w > Fluid.S_r);
    
    
     co_boil = ((P_wv + P_nv) >= (P_w + Fluid.P_D));
@@ -444,10 +449,10 @@ while t < t_end*86400
     old_T = T;
     
     times = [times; t];
-    temps = [temps; mean(mean(T - 273.15*ones(Grid.Nz,Grid.Nx)))];
+    temps = [temps; mean(mean(T - 0*ones(Grid.Nz,Grid.Nx)))];
 end
 
-T = T - 273.15*ones(Grid.Nz,Grid.Nx);
+T = T - 0*ones(Grid.Nz,Grid.Nx);
 
 % figure(1)
 % [cs, hs] = contourf(xx,zz,flip(T,1));

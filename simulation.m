@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 200;                % end time (in days)
+t_end = 180;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -63,7 +63,7 @@ Q = zeros(Grid.Nz, Grid.Nx);
 
 % Initial saturations
 S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
-% S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
+S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
 % S_n(:, 1:41) = 0.5;      S_n(:,42:81) = 0.87;     S_n(:,82:end) = 0.01;
 % S_n(:, 1:11) = 0.5;      S_n(:,12:21) = 0.87;     S_n(:,22:end) = 0.01;
 S_n = 0.01*ones(Grid.Nz, Grid.Nx);
@@ -74,19 +74,21 @@ Fluid.S_gcr = 0.15;                           % critical gas saturation
 % heat flux due to the heaters
 % f_r = 0 ./ (1000 .* lambda(:,1));
 % f_l = -80/2.75;
-% f_l = (-10/0.15)*ones(size(T(:,1)));
+% f_l = (-10/2.75)*ones(size(T(:,1)));
 % f_l = -20/(2*lambda(:,1))
 % f_r = 10/0.15;
 % f_l = 0; 
 f_r = 0;
 
 % initial K_e
-K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));
+K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));
 
 % initial thermal conductivity
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
 
-f_l = -400./(2*lambda(:,1));
+% heaters
+Q_H = 350;
+f_l = -Q_H./(2*lambda(:,1));
 
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -174,11 +176,12 @@ while t < t_end*86400
     t = t + Grid.dt;
      
     % compute temp
-    T = temp_v7(Grid, T, Q, lambda, heat_cap, f_l, f_r, co_boil);
+%     T = temp_v7(Grid, T, Q, lambda, heat_cap, f_l, f_r, co_boil);
+    T = temp_v3(Grid, T, Q, lambda, heat_cap, f_l, f_r);
     
 %     T = T_cb.*co_boil + T .* (co_boil == 0);
     
-    Tdata = [Tdata; T(1,1)];
+%     Tdata = [Tdata; T(1,1)];
     
     % compute vapor pressure using Antoine eqn
 %     P_nv = exp(19.796*ones(size(T)) - 2289.8*ones(size(T))...
@@ -212,7 +215,7 @@ while t < t_end*86400
         
         size_cb = size(x_cb_vals, 1);
     end
-    
+        
     co_boil_w = (co_boil_w + co_boil).*(S_n == 0).*(S_w > Fluid.S_r);
     T_cb_w = (T_cb_w + T .* (co_boil_w == 1)).*(S_n == 0).*(S_w >= Fluid.S_r);
     
@@ -229,16 +232,22 @@ while t < t_end*86400
     co_boil_n = co_boil_n > 0;
     
     co_boil = (co_boil_w + co_boil_n + co_boil_nw) > 0;
-    T_cb = T_cb_w + T_cb_n + T_cb_nw;       
+    T_cb = T_cb_w + T_cb_n + T_cb_nw;     
+    
+%     T = T.*(co_boil == 0) + 101.524 .* co_boil_w + 88.7437 .* co_boil_n...
+%         + 75.1006 .* co_boil_nw;
+    
+    Tdata = [Tdata; T(1,1)];
 
     % check if T reaches co-boiling temp
-    if any(co_boil, 'all') == 1
+    if any(co_boil, 'all') == 1        
         
         
          % Compute Q which is given by Q = div(lambda * grad(T))
          
-         Q = compute_Q(T, -10/0.15, f_r, lambda, Grid);
-         
+%          Q = compute_Q(T, f_l, f_r, lambda, Grid);
+         [T_x, T_z] = gradient(T, x, z);
+         Q = divergence(x, z, lambda.*T_x, lambda.*T_z);
                   
          % Q > 0 only in cells that reach co-boiling temperature, otherwise
          % Q = 0
@@ -247,6 +256,9 @@ while t < t_end*86400
 %          Q = Q .* (Q > 0);
          Q_p = Q .* (Q > 0);
          
+%          Q = abs(Q);
+         
+%          Q = Q_p;
          % compute the moles of vapor produced using the energy
          % balance equation and Dalton's law  
          
@@ -260,7 +272,7 @@ while t < t_end*86400
          n_gn = (n_gw.*P_nv./P_wv) .* (P_wv ~= 0);
              
          n_gn(isnan(n_gn)) = 0;
-         n_gn = n_gn + ((Q_p*Grid.dx*Grid.dz*Grid.dt) ./ (Fluid.L_n*ones(size(Q))))...
+         n_gn = n_gn + ((Q*Grid.dx*Grid.dz*Grid.dt) ./ (Fluid.L_n*ones(size(Q))))...
              .* (P_wv == 0);                     
          
          n_gn = n_gn .* co_boil;        n_gw = n_gw .* co_boil;
@@ -315,9 +327,9 @@ while t < t_end*86400
         T_vals = [T_vals; nonzeros((Sn_vapor == 1).*T(1,:))];
         t_vals = [t_vals; nonzeros(t * (Sn_vapor == 1))];
         
-        if any(S_n(1,:) ~= 0, 'all') == 0
-            break
-        end
+%         if any(S_n(1,:) ~= 0, 'all') == 0
+%             break
+%         end
         
         Sw_vapor = Sw_vapor + (S_w(1,:) <= 0.13);
         if S_w(1,1) <= 0.13 && Sw_vapor(1,1) == 1
@@ -335,10 +347,10 @@ while t < t_end*86400
 %              colormap([1 1 1; 0 0 1]);
 %              image((S_g >= Fluid.S_gcr) .* 255);
 
-             [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
-                 S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid,...
-                 extractors);
-             
+%              [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
+%                  S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid,...
+%                  extractors);
+%              
 %              figure(3)
 %              colormap([1 1 1; 0 0 1]);
 %              image((S_g >= Fluid.S_gcr) .* 255);
@@ -435,11 +447,11 @@ while t < t_end*86400
              (1-Fluid.por)*Fluid.rho_s*Fluid.C_ps;
 
          % update thermal conductivity
-         K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));    
+         K_e = (kappa*(S_w + S_n))./(1 + (kappa - 1)*(S_w + S_n));    
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
         
          
-%          f_l = -10./(Grid.Nx.*lambda(:,1));
+         f_l = -Q_H./(2*lambda(:,1));
          
          Q_old = Q;
     end

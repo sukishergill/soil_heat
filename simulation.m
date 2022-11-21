@@ -11,7 +11,7 @@ z = linspace(0, Grid.z, Grid.Nz);
 [xx,zz]=meshgrid(x,z);
 
 t = 0;                     % start time
-t_end = 180;                % end time (in days)
+t_end = 30;                % end time (in days)
 Grid.dt = 720;             % time step (seconds)
 
 % parameters
@@ -255,6 +255,7 @@ while t < t_end*86400
          
 %          Q = Q .* (Q > 0);
          Q_p = Q .* (Q > 0);
+         Q = Q_p;
          
 %          Q = abs(Q);
          
@@ -327,9 +328,9 @@ while t < t_end*86400
         T_vals = [T_vals; nonzeros((Sn_vapor == 1).*T(1,:))];
         t_vals = [t_vals; nonzeros(t * (Sn_vapor == 1))];
         
-%         if any(S_n(1,:) ~= 0, 'all') == 0
-%             break
-%         end
+        if any(S_n(1,:) ~= 0, 'all') == 0
+            break
+        end
         
         Sw_vapor = Sw_vapor + (S_w(1,:) <= 0.13);
         if S_w(1,1) <= 0.13 && Sw_vapor(1,1) == 1

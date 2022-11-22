@@ -38,7 +38,7 @@ for j = 1:Nz
            asup2(idx) = (-dt/heat_cap(i,j)) * (l_jm+l_jp)/dz^2;
            
            [asub1(idx),asup1(idx), rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r);
            
            
        elseif j == Nz
@@ -50,7 +50,7 @@ for j = 1:Nz
            asub2(idx) = (-dt/heat_cap(i,j))*((l_jm+l_jp)/dz^2);
            
            [asub1(idx),asup1(idx),rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r);
                                       
        else
            l_jp = 2*(lambda(i,j)*lambda(i,j+1))/(lambda(i,j)+lambda(i,j+1));
@@ -60,7 +60,7 @@ for j = 1:Nz
            asup2(idx) = (-dt/heat_cap(i,j)) * (l_jp/dz^2);
            
            [asub1(idx),asup1(idx), rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r);
             
        end
        

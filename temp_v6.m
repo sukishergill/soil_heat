@@ -11,6 +11,7 @@ Q = reshape(Q', Nx*Nz, 1);
 
 lambda = lambda';
 heat_cap = heat_cap';
+heat_cap = 2*heat_cap;
 
 a1 = repmat(zeros(Nx,1), Nz, 1);       % main diagonal
 
@@ -38,7 +39,7 @@ for j = 1:Nz
            asup2(idx) = (-dt/heat_cap(i,j)) * (l_jm+l_jp)/dz^2;
            
            [asub1(idx),asup1(idx), rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r(j));
            
            
        elseif j == Nz
@@ -50,7 +51,7 @@ for j = 1:Nz
            asub2(idx) = (-dt/heat_cap(i,j))*((l_jm+l_jp)/dz^2);
            
            [asub1(idx),asup1(idx),rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r(j));
                                       
        else
            l_jp = 2*(lambda(i,j)*lambda(i,j+1))/(lambda(i,j)+lambda(i,j+1));
@@ -60,7 +61,7 @@ for j = 1:Nz
            asup2(idx) = (-dt/heat_cap(i,j)) * (l_jp/dz^2);
            
            [asub1(idx),asup1(idx), rhsvec(idx)] = ...
-               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l, f_r);
+               solve_i(i, j, heat_cap, lambda, Nx, dx, dt, f_l(j), f_r(j));
             
        end
        
@@ -80,6 +81,7 @@ asub2 = [asub2(Nx+1:end); zeros(Nx,1)];
 A = spdiags( [ asub2, asub1, a1, asup1, asup2],...
     [-Nx, -1, 0, 1, Nx], Nx*Nz, Nx*Nz);
 
+A = (2/3)*A;
 
 T0 = reshape(T0', Nx*Nz, 1);    T1 = reshape(T1', Nx*Nz, 1);
 
@@ -87,7 +89,7 @@ T0 = reshape(T0', Nx*Nz, 1);    T1 = reshape(T1', Nx*Nz, 1);
 
 % Tnew = U \ (L \ (2*T1 - 0.5*T0 - rhsvec - Q));
 
-Tnew = A \ (2*T1 - 0.5*T0 - rhsvec - Q);
+Tnew = A \ ((4/3)*T1 - (1/3)*T0 - rhsvec - Q);
 
 Tnew = reshape(Tnew, Nx, Nz)';
 

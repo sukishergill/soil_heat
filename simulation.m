@@ -1,7 +1,7 @@
 clear variables;
 % Numerical simulation as described in Mumford (2020)
 
-load('initial_rand_data_001_2.mat')
+% load('initial_rand_data_005.mat')
 % S_n = Sn_initial;
 
 % domain
@@ -69,7 +69,7 @@ S_g = zeros(Grid.Nz,Grid.Nx);           % initial gas saturation
 % S_n = zeros(Grid.Nz,Grid.Nx);       % initial water saturation
 % S_n(:, 1:41) = 0.5;      S_n(:,42:81) = 0.87;     S_n(:,82:end) = 0.01;
 % S_n(:, 1:11) = 0.5;      S_n(:,12:21) = 0.87;     S_n(:,22:end) = 0.01;
-% % S_n = 0.01*ones(Grid.Nz, Grid.Nx);
+S_n = 0.01*ones(Grid.Nz, Grid.Nx);
 S_w = ones(Grid.Nz,Grid.Nx) - S_n;      % initial NAPL saturation
 Fluid.S_r = 0.13;                             % residual wetting saturation
 Fluid.S_gcr = 0.15;                           % critical gas saturation
@@ -83,13 +83,13 @@ K_e = (kappa*(1 - S_g))./(1 + (kappa - 1)*(1 - S_g));
 lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;   
 
 % heaters
-Q_H = 350;
-f_l = -Q_H./(2*lambda(:,1));
+Q_H = 175;
+f_l = -Q_H./(lambda(:,1));
 % f_r = Q_H ./(2*lambda(:,end));
 f_r = zeros(size(f_l));
 
-% f_l(52:end) = 0;
-% f_r(52:end) = 0;
+% f_l(102:end) = 0;
+% f_r(102:end) = 0;
 
 % initial heat capacity
 heat_cap = S_w*Fluid.por*Fluid.rho_w*Fluid.C_pw + ...
@@ -318,9 +318,9 @@ while t < t_end*86400
 %              colormap([1 1 1; 0 0 1]);
 %              image((S_g >= Fluid.S_gcr) .* 255);
 
-             [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
-                 S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid,...
-                 extractors);
+%              [S_g, S_w, S_n, n_gn_tot, n_gw_tot] = macroIP(S_g, S_n, ...
+%                  S_w, P_w, T, n_gw_tot, n_gn_tot, co_boil, V_cell, Fluid,...
+%                  extractors);
              
 %              figure(3)
 %              colormap([1 1 1; 0 0 1]);
@@ -426,8 +426,12 @@ while t < t_end*86400
          lambda = K_e*(lambda_sat - lambda_dry) + lambda_dry;
         
          
-         f_l = -Q_H./(2*lambda(:,1));
+         f_l = -Q_H./(lambda(:,1));
+%          f_r = Q_H./(2*lambda(:,1));
          
+%          f_l(102:end) = 0;
+%          f_r(52:end) = 0;
+        
          Q_old = Q;
     end
 
